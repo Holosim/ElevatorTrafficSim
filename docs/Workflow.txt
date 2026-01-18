@@ -1,0 +1,88 @@
+1. Stakeholder needs (from most generic to most specific)
+	- stakeholder Mission
+	- project value
+	- Client Narrative
+	- Statement of work
+	- Stakeholder Needs Matrix (Numbered list of target features as defined by product manager)
+2. Scope of Work
+	- Internal Narrative
+	- Initial Requirements Breakdown (IRB - based on stakeholder needs)
+	- Questions/Assumptions to IRB (Followed by RFIs to clarify answers)
+		- Question all gaps
+		- Challenge all assumptions
+		- 5 W's
+			- Who
+				- Leads to actors/agents
+				- Who will use the system
+				- Who will maintain the system
+				- How many "whos" inside the system
+			- What
+				- What are the outputs
+				- What are the functions
+				- What are the custom events
+				- what are the units of measure
+				- What are the internal data points?
+			- When 
+				- when will this operate:  on demand or regular cadence
+				- how frequently
+				- for how long
+			- Where
+				- Where should this be stored
+				- Where should this be accessible
+			- How
+				- how will the informaiton handle input/output
+				- Will data be stransferred
+				- How will the users enter, receive data (Winforms UI, web app, text-based config file)
+3. Requirements
+	- Agents
+		- Users  (one at a time vs multiple concurrent)
+		- Maintenance
+		- Automations
+	- Action Diagrams
+		- What are the workflows for each agent? (User input, maintainance modes, output reporting, automated seqences)
+4. Data Structures
+	- Mapping the Data
+		- Whiteboard, figma, sketchpad
+		- Identify datapoints
+		- Group into collections of data
+	- Map Internal Data types to datapoints
+		- Identify custom data types
+	- Data Transfer (MQTT vs. WebRTC)
+	- TCP/IP vs UDP
+	- Data ordering
+		- For efficiency
+		- or random ordering
+	- Data Storage (e.g. SQL and/or Text File)
+5. Architecture
+	- Structure (e.g. Windows Forms application & Class Library)
+	- Figma wireframes for UI
+	- Custom Events
+	- Error Handling
+	- Interfaces
+	- External communication
+		- Email status
+		- Texting	
+6. Logic Planning
+	- Walk through what each peice of the applicaiton is going to do.
+	- Bring up each wireframe and break down into separate function identities
+	- Breakdown each diagram into classes and methdos.
+	- SysML
+	- UML Diagrams
+	
+7. Begin Building code file structure
+	- First step in actual coding
+	- Configure project types for the entire solution
+		- Class Libraries
+		- Drivers
+		- Interface (Console, WPF, etc)
+	- Configure classes	
+		- One File Per Object
+		- Populate with properties and methods
+	- Code will only be stubs of non-functional, but compilable, code.
+		- Comment for structure
+8. Wire up data structure
+9. Test and Adjust
+	
+	
+
+	

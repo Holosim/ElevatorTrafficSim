@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36401.2
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorSim.Interfaces", "ElevatorSim.Interfaces\ElevatorSim.Interfaces.csproj", "{EEC0F043-B252-4C21-ABF6-AEA7E77B6AB2}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorSim.DataIO", "ElevatorSim.DataIO\ElevatorSim.DataIO.csproj", "{1C2042D8-26A8-4890-8143-B7657ADCFCEB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElevatorSim.Core", "ElevatorSim.Core\ElevatorSim.Core.csproj", "{75FB1029-3D3D-F883-5036-FBE77C521041}"
@@ -19,10 +17,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{EEC0F043-B252-4C21-ABF6-AEA7E77B6AB2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EEC0F043-B252-4C21-ABF6-AEA7E77B6AB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EEC0F043-B252-4C21-ABF6-AEA7E77B6AB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EEC0F043-B252-4C21-ABF6-AEA7E77B6AB2}.Release|Any CPU.Build.0 = Release|Any CPU
 		{1C2042D8-26A8-4890-8143-B7657ADCFCEB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1C2042D8-26A8-4890-8143-B7657ADCFCEB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1C2042D8-26A8-4890-8143-B7657ADCFCEB}.Release|Any CPU.ActiveCfg = Release|Any CPU

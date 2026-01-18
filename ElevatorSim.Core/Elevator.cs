@@ -3,10 +3,33 @@ using System.Collections.Generic;
 
 /*
  * How the Elevator class works
- * The Elevator class models a single elevator car’s behavior and state in the simulation. Each instance has a unique Id and tracks its current CurrentFloor, a nullable TargetFloor, and the Direction of travel (Up, Down, or Idle). Capacity sets the maximum number of passengers that can ride at once; Passengers holds the current occupants.
- * The constructor initializes the elevator’s ID, starting floor, capacity and sets it to an idle state with no destination. To assign a destination, a controller calls SetTargetFloor(floor), which records the target and sets the direction based on whether the target is above, below or equal to the current floor. The elevator doesn’t move immediately; instead, the controller periodically calls UpdatePosition(). In each call, UpdatePosition adjusts CurrentFloor by one in the direction of travel and checks whether the elevator has arrived. When it reaches the target floor, TargetFloor is cleared and the direction is reset to Idle, making the elevator free for new assignments.
- * Passenger handling is straightforward: LoadPassenger checks whether there is room (i.e. Passengers.Count < Capacity) and, if so, adds the Person to the list and notifies the passenger via Person.EnterElevator. UnloadPassenger removes a passenger from the list and calls Person.ExitElevator. Doors are represented by empty OpenDoor and CloseDoor methods for now; these are placeholders where future logic could simulate door timings or state changes.
- * The class implements IElevator, which requires generic methods (MoveToFloor, LoadPassenger(object), UnloadPassenger(object), and interface properties such as IElevator.Direction and IElevator.Passengers). In this simplified model, these interface members either throw NotImplementedException because the concrete class uses its own strongly typed methods, or they forward to the existing properties (Passengers). The IsIdle property returns true when there is no active destination. Altogether, Elevator encapsulates per‑car logic while delegating high‑level control (dispatch decisions, calling UpdatePosition on each tick) to the building’s controller.
+ * The Elevator class models a single elevator car’s behavior and state in the simulation. 
+ * Each instance has a unique Id and tracks its current CurrentFloor, a nullable TargetFloor, 
+ * and the Direction of travel (Up, Down, or Idle). Capacity sets the maximum number of passengers 
+ * that can ride at once; Passengers holds the current occupants.
+ * 
+ * The constructor initializes the elevator’s ID, starting floor, capacity and sets it to an idle state 
+ * with no destination. To assign a destination, a controller calls SetTargetFloor(floor), 
+ * which records the target and sets the direction based on whether the target is above, 
+ * below or equal to the current floor. The elevator doesn’t move immediately; instead, 
+ * the controller periodically calls UpdatePosition(). In each call, UpdatePosition adjusts 
+ * CurrentFloor by one in the direction of travel and checks whether the elevator has arrived. 
+ * When it reaches the target floor, TargetFloor is cleared and the direction is reset to Idle, 
+ * making the elevator free for new assignments.
+ * 
+ * Passenger handling is straightforward: LoadPassenger checks whether there is room 
+ * (i.e. Passengers.Count < Capacity) and, if so, adds the Person to the list and notifies the passenger 
+ * via Person.EnterElevator. UnloadPassenger removes a passenger from the list and calls Person.ExitElevator. 
+ * Doors are represented by empty OpenDoor and CloseDoor methods for now; these are placeholders where 
+ * future logic could simulate door timings or state changes.
+ * 
+ * The class implements IElevator, which requires generic methods (MoveToFloor, LoadPassenger(object), 
+ * UnloadPassenger(object), and interface properties such as IElevator.Direction and IElevator.Passengers). 
+ * In this simplified model, these interface members either throw NotImplementedException because the 
+ * concrete class uses its own strongly typed methods, or they forward to the existing properties (Passengers). 
+ * The IsIdle property returns true when there is no active destination. 
+ * Altogether, Elevator encapsulates per‑car logic while delegating high‑level control (dispatch decisions, 
+ * calling UpdatePosition on each tick) to the building’s controller.
 */
 
 namespace ElevatorSim.Core
@@ -219,8 +242,20 @@ public class Elevator : IElevator
         public bool IsIdle => TargetFloor == null;
 
         /** @brief Explicit implementation of IElevator.Direction. Not implemented here. */
-        Common.ElevatorDirection IElevator.Direction => throw new NotImplementedException();
-
+        // Assuming this.Direction is of type ElevatorSim.Core.ElevatorDirection
+        // Map it to the Common.ElevatorDirection type used in the interface.
+        Common.ElevatorDirection IElevator.Direction
+        {
+            get
+            {
+                return Direction switch
+                {
+                    ElevatorDirection.Up => Common.ElevatorDirection.Up,
+                    ElevatorDirection.Down => Common.ElevatorDirection.Down,
+                    _ => Common.ElevatorDirection.Idle,
+                };
+            }
+        }
         /**
          * @brief Explicit implementation of IElevator.Passengers for object enumeration.
          *

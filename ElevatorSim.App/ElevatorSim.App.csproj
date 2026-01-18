@@ -11,7 +11,6 @@
     <ProjectReference Include="..\ElevatorSim.Common\ElevatorSim.Common.csproj" />
     <ProjectReference Include="..\ElevatorSim.Core\ElevatorSim.Core.csproj" />
     <ProjectReference Include="..\ElevatorSim.DataIO\ElevatorSim.DataIO.csproj" />
-    <ProjectReference Include="..\ElevatorSim.Interfaces\ElevatorSim.Interfaces.csproj" />
   </ItemGroup>
 	
 </Project>
