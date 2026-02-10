@@ -84,7 +84,7 @@ public sealed class PassengerController
                 _nextArrivalT[ptype] = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
             var nextT = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
             if (double.IsPositiveInfinity(nextT))
-                nextT = tSimSeconds + horizonSeconds; // try again next tick window
+                nextT = tSimSeconds + horizonSeconds; // try again next window
             _nextArrivalT[ptype] = nextT;
 
 

@@ -57,9 +57,11 @@ internal static class Program
         const int elevatorCount = 4;
         const int elevatorCapacity = 16;
 
-        const double dtSim = 0.2;                 // 5 Hz simulation tick (sim-time)
-        const double simDurationSeconds = 60.0;   // run length in sim-time
-        const double speedFloorsPerSecond = 1.0;  // simple movement constant for now
+        const double dtSim = 0.2;                   // 5 Hz simulation tick (sim-time)
+        const double simDurationSeconds = 600.0;    // 10 minutes of sim-time
+        const double simStartSeconds = 8 * 3600.0;  // start at 08:00 to hit office rush curves
+        const double speedFloorsPerSecond = 1.0;    // simple movement constant for now
+
 
         // ------------------------------------------------------------
         // Emit RunStarted (contract event directly)
@@ -141,9 +143,11 @@ internal static class Program
             OriginFloor: 0,
             DestinationFloor: 10,
             Direction: 1,  // 1=Up
-            RequestT: 0.0);
+            RequestT: simStartSeconds); // align request time with sim start
 
+        metrics.RecordCallSubmitted(call);
         elevatorController.SubmitCall(call);
+
 
         // ------------------------------------------------------------
         // Tick-based loop (sim-time). Snapshots at 5 Hz sim-time
@@ -159,7 +163,7 @@ internal static class Program
         for (int i = 0; i < totalTicks; i++)
         {
             tick++;
-            var tSim = i * dtSim;
+            var tSim = simStartSeconds + (i * dtSim);
 
             // Optional demo: flip wall throttle based on real elapsed time
             if (stopwatch.Elapsed.TotalSeconds >= 2.0)
@@ -174,7 +178,7 @@ internal static class Program
                 bus: bus,
                 elevatorController: elevatorController,
                 tSimSeconds: tSim,
-                horizonSeconds: Math.Max(300.0, simDurationSeconds - tSim),
+                horizonSeconds: Math.Max(300.0, (simStartSeconds + simDurationSeconds) - tSim),
                 onCallSubmitted: metrics.RecordCallSubmitted);
 
 
@@ -230,15 +234,15 @@ internal static class Program
         Console.WriteLine($"Samples: {report.OverallRide.Count}");
         Console.WriteLine($"Avg ride: {report.OverallRide.Avg:F2}s");
         Console.WriteLine($"P95 ride: {report.OverallRide.P95:F2}s");
-        Console.WriteLine($"Spawned people: {totalSpawned} ({spawnRatePerHour:F1}/hr)");
-        Console.WriteLine($"Submitted calls: {totalCallsSubmitted} ({callRatePerHour:F1}/hr)");
+        //Console.WriteLine($"Spawned people: {totalSpawned} ({spawnRatePerHour:F1}/hr)");
+        //Console.WriteLine($"Submitted calls: {totalCallsSubmitted} ({callRatePerHour:F1}/hr)");
 
         long runEndedSeq = runStartedSeq;
 
         await eventBatcher.EnqueueAsync(new SimEventRecord(
             RunId: runId,
             Sequence: Interlocked.Increment(ref runEndedSeq),
-            T: simDurationSeconds,
+            T: simStartSeconds + simDurationSeconds,
             Type: SimEventType.RunEnded,
             Source: "ConsoleHost",
             Message: "Elevator Traffic Simulator run ended",
