@@ -1,16 +1,32 @@
-﻿using ElevatorTrafficSimulator.ConsoleHost.Publishing;
+﻿using System.Diagnostics;
+
+using ElevatorTrafficSimulator.ConsoleHost.Publishing;
 using ElevatorTrafficSimulator.ConsoleHost.Publishing.Batching;
 using ElevatorTrafficSimulator.ConsoleHost.Publishing.Snapshots;
+
 using FlowCore.Contracts.Common;
 using FlowCore.Contracts.Events;
 using FlowCore.Contracts.Snapshots;
-using FlowCore.Simulation.Publishing;
-using System.Diagnostics;
+
+using FlowCore.Domain.Building;
+using FlowCore.Domain.Common;
+using FlowCore.Domain.Events;
+using FlowCore.Domain.People;
+using FlowCore.Domain.Requests;
+using FlowCore.Domain.Routing;
+
+using FlowCore.Simulation;
+using FlowCore.Simulation.Adapters;
+using FlowCore.Simulation.Events;
+
 
 internal static class Program
 {
     private static async Task Main()
     {
+        // ------------------------------------------------------------
+        // Output + Publishers
+        // ------------------------------------------------------------
         var outputDir = Path.Combine(AppContext.BaseDirectory, "out");
         await using var publisher = new NdjsonContractPublisher(outputDir);
 
@@ -21,67 +37,112 @@ internal static class Program
             maxBatchSize: 512,
             flushInterval: TimeSpan.FromMilliseconds(100));
 
-        // Snapshots: coalescing, optional wall-time throttle
+        // Snapshots: coalescing + optional wall-time throttle
         await using var snapshotPublisher = new SnapshotPublisherCoalescing(
             publishAsync: snap => publisher.PublishSnapshotAsync(snap),
             enableWallThrottle: false,
             wallThrottlePeriod: TimeSpan.FromSeconds(1)); // 1 Hz wall-time when enabled
 
-        // Toggle wall-time throttling easily here
+        // Easy toggle:
         // snapshotPublisher.EnableWallThrottle = true;
 
+        // ------------------------------------------------------------
+        // Run metadata
+        // ------------------------------------------------------------
         var runId = 1;
-        long seq = 0;
+        long runStartedSeq = 0;
         long tick = 0;
 
-        // Emit RunStarted event
+        const int floorCount = 40;
+        const int elevatorCount = 4;
+        const int elevatorCapacity = 16;
+
+        const double dtSim = 0.2;                 // 5 Hz simulation tick (sim-time)
+        const double simDurationSeconds = 60.0;   // run length in sim-time
+        const double speedFloorsPerSecond = 1.0;  // simple movement constant for now
+
+        // ------------------------------------------------------------
+        // Emit RunStarted (contract event directly)
+        // ------------------------------------------------------------
         await eventBatcher.EnqueueAsync(new SimEventRecord(
             RunId: runId,
-            Sequence: Interlocked.Increment(ref seq),
+            Sequence: Interlocked.Increment(ref runStartedSeq),
             T: 0.0,
             Type: SimEventType.RunStarted,
             Source: "ConsoleHost",
-            Message: "Smoke test run started",
+            Message: "Elevator Traffic Simulator run started",
             Payload: JsonPayload.From(new RunStartedPayload(
-                FloorCount: 40,
-                ElevatorCount: 4,
+                FloorCount: floorCount,
+                ElevatorCount: elevatorCount,
                 RandomSeed: 12345,
-                PlannedDurationSeconds: 60.0,
-                ScenarioName: "SmokeTest",
+                PlannedDurationSeconds: simDurationSeconds,
+                ScenarioName: "SingleCall_Smoke",
                 ContractVersion: ContractVersion.AsString()
             ))
         ));
 
-        // Tick-based sim: 5 Hz
-        // This means dtSim = 0.2 seconds of simulation time per tick.
-        var dtSim = 0.2;
-        var simDurationSeconds = 10.0; // short smoke test
-        var totalTicks = (int)Math.Ceiling(simDurationSeconds / dtSim);
+        // ------------------------------------------------------------
+        // Build Domain + Simulation
+        // ------------------------------------------------------------
+        var building = new Building(floorCount);
 
-        // Dummy state for snapshot generation
-        var elevatorCount = 4;
-        var floorCount = 40;
+        var bus = new InMemoryEventBus();
 
-        var elevatorPositions = new double[elevatorCount]; // position in floors
-        var elevatorTargets = new int?[elevatorCount];
-        var elevatorDirections = new MotionDirection[elevatorCount];
-        var elevatorStates = new VehicleState[elevatorCount];
-        var elevatorOccupants = new int[elevatorCount];
-        var elevatorCapacities = new int[elevatorCount];
-
+        var elevators = new List<Elevator>(capacity: elevatorCount);
         for (int i = 0; i < elevatorCount; i++)
+            elevators.Add(new Elevator(id: i + 1, capacity: elevatorCapacity, startFloor: 0));
+
+        var strategy = new DispatchStrategyBasic();
+        var elevatorController = new ElevatorController(bus, strategy, elevators);
+
+        // Adapter: DomainEvents -> SimEventRecord -> eventBatcher (async-safe)
+        await using var adapter = new ContractEventAdapterAsync(
+            runId: runId,
+            bus: bus,
+            emitAsync: evt => eventBatcher.EnqueueAsync(evt));
+
+        // ------------------------------------------------------------
+        // Seed a single person + a single call from Lobby (0) -> 10
+        // ------------------------------------------------------------
+        var route = new Route(new[]
         {
-            elevatorPositions[i] = 0.0;
-            elevatorTargets[i] = 10 + i * 2;
-            elevatorDirections[i] = MotionDirection.Up;
-            elevatorStates[i] = VehicleState.Moving;
-            elevatorOccupants[i] = 0;
-            elevatorCapacities[i] = 16;
-        }
+            new Destination(Floor: 10, PlannedStaySeconds: 0)
+        });
 
-        var waitingUp = new int[floorCount];
-        var waitingDown = new int[floorCount];
+        var person = new Person(
+            id: 1,
+            type: FlowCore.Contracts.Common.PassengerType.OfficeWorker,
+            startFloor: 0,
+            route: route);
 
+        // Put person into floor queue (Up)
+        building.GetFloor(0).EnqueueUp(person.Id);
+
+        // Publish QueueSizeChanged domain event so it appears in logs immediately.
+        bus.Publish(new QueueSizeChangedDomainEvent(
+            T: 0.0,
+            Source: "FloorSystem",
+            Floor: 0,
+            Direction: 1, // 1=Up
+            NewQueueSize: building.GetFloor(0).WaitingUpCount
+        ));
+
+        // Submit a call request
+        var call = new CallRequest(
+            CallId: 1,
+            PersonId: person.Id,
+            PersonType: person.Type,
+            OriginFloor: 0,
+            DestinationFloor: 10,
+            Direction: 1,  // 1=Up
+            RequestT: 0.0);
+
+        elevatorController.SubmitCall(call);
+
+        // ------------------------------------------------------------
+        // Tick-based loop (sim-time). Snapshots at 5 Hz sim-time
+        // ------------------------------------------------------------
+        var totalTicks = (int)Math.Ceiling(simDurationSeconds / dtSim);
         var stopwatch = Stopwatch.StartNew();
 
         for (int i = 0; i < totalTicks; i++)
@@ -89,155 +150,83 @@ internal static class Program
             tick++;
             var tSim = i * dtSim;
 
-            // Example wall-time toggle during the run
-            // Turn throttling on after 2 seconds of real time
+            // Optional demo: flip wall throttle based on real elapsed time
+            // (wall-time = real elapsed clock time)
             if (stopwatch.Elapsed.TotalSeconds >= 2.0)
                 snapshotPublisher.EnableWallThrottle = true;
 
-            // Turn throttling off again after 5 seconds of real time
             if (stopwatch.Elapsed.TotalSeconds >= 5.0)
                 snapshotPublisher.EnableWallThrottle = false;
 
-            // Fake some queue churn
-            var lobby = 0;
-            waitingUp[lobby] = (int)(5 + 3 * Math.Sin(tSim));
-            waitingDown[10] = (int)(2 + 2 * Math.Cos(tSim));
+            // 1) Move elevators
+            foreach (var e in elevatorController.Fleet)
+                e.Update(dtSim, speedFloorsPerSecond);
 
-            // Move elevators toward their target at 1 floor per second (for smoke test)
-            // dtSim is 0.2s, so delta floors = 0.2 floors per tick
-            var speedFloorsPerSecond = 1.0;
-            var deltaFloors = speedFloorsPerSecond * dtSim;
+            // 2) Controller lifecycle (assign calls, board/unboard, etc.)
+            elevatorController.Update(building, tSim, dtSim);
 
-            for (int e = 0; e < elevatorCount; e++)
-            {
-                var target = elevatorTargets[e] ?? 0;
-                var pos = elevatorPositions[e];
-
-                if (Math.Abs(pos - target) < 1e-6)
-                {
-                    // Arrived. Emit an event occasionally
-                    await eventBatcher.EnqueueAsync(new SimEventRecord(
-                        RunId: runId,
-                        Sequence: Interlocked.Increment(ref seq),
-                        T: tSim,
-                        Type: SimEventType.ElevatorArrived,
-                        Source: $"Elevator#{e + 1}",
-                        Message: $"Arrived at floor {target}",
-                        Payload: JsonPayload.From(new ElevatorArrivedPayload(
-                            VehicleId: e + 1,
-                            Floor: target,
-                            Direction: elevatorDirections[e]
-                        ))
-                    ));
-
-                    // Flip target for demo
-                    elevatorTargets[e] = target == 0 ? 20 + e : 0;
-                    elevatorDirections[e] = elevatorTargets[e] > target ? MotionDirection.Up : MotionDirection.Down;
-                    elevatorStates[e] = VehicleState.Moving;
-
-                    // Also emit a queue size change event for analytics plumbing
-                    await eventBatcher.EnqueueAsync(new SimEventRecord(
-                        RunId: runId,
-                        Sequence: Interlocked.Increment(ref seq),
-                        T: tSim,
-                        Type: SimEventType.QueueSizeChanged,
-                        Source: "FloorSystem",
-                        Message: "Lobby up-queue changed",
-                        Payload: JsonPayload.From(new QueueSizeChangedPayload(
-                            Floor: 0,
-                            Direction: MotionDirection.Up,
-                            NewQueueSize: waitingUp[0]
-                        ))
-                    ));
-                }
-                else
-                {
-                    // Move toward target
-                    if (pos < target)
-                    {
-                        elevatorDirections[e] = MotionDirection.Up;
-                        pos = Math.Min(target, pos + deltaFloors);
-                    }
-                    else
-                    {
-                        elevatorDirections[e] = MotionDirection.Down;
-                        pos = Math.Max(target, pos - deltaFloors);
-                    }
-
-                    elevatorPositions[e] = pos;
-                }
-            }
-
-            // Build and enqueue snapshot at 5 Hz sim-time (every tick here)
-            var snap = BuildSnapshot(runId, tick, tSim,
-                elevatorPositions, elevatorTargets, elevatorDirections, elevatorStates, elevatorCapacities, elevatorOccupants,
-                waitingUp, waitingDown);
-
+            // 3) Snapshot (coalesced publisher)
+            var snap = BuildSnapshot(runId, tick, tSim, building, elevatorController.Fleet);
             snapshotPublisher.TryEnqueue(snap);
-
-            // This smoke test runs as fast as possible.
-            // If you want to see wall-time throttling behavior more clearly,
-            // you can slow it down a bit with Task.Delay(20) or similar.
         }
 
-        // Emit RunEnded event
+        // ------------------------------------------------------------
+        // Emit RunEnded (contract event directly)
+        // ------------------------------------------------------------
+        long runEndedSeq = runStartedSeq;
+
         await eventBatcher.EnqueueAsync(new SimEventRecord(
             RunId: runId,
-            Sequence: Interlocked.Increment(ref seq),
+            Sequence: Interlocked.Increment(ref runEndedSeq),
             T: simDurationSeconds,
             Type: SimEventType.RunEnded,
             Source: "ConsoleHost",
-            Message: "Smoke test run ended",
+            Message: "Elevator Traffic Simulator run ended",
             Payload: JsonPayload.From(new RunEndedPayload(
-                TotalPeople: 0,
-                TotalCallsCompleted: 0
+                TotalPeople: 1,
+                TotalCallsCompleted: 1
             ))
         ));
 
-        Console.WriteLine($"Smoke test complete. Output dir: {outputDir}");
+        Console.WriteLine($"Run complete. Output dir: {outputDir}");
         Console.WriteLine("Files: events.ndjson, snapshots.ndjson");
-        Console.WriteLine("Wall throttle toggled on/off during run for demonstration.");
     }
 
     private static SimTickSnapshot BuildSnapshot(
         int runId,
         long tick,
         double tSim,
-        double[] elevatorPositions,
-        int?[] elevatorTargets,
-        MotionDirection[] elevatorDirections,
-        VehicleState[] elevatorStates,
-        int[] elevatorCapacities,
-        int[] elevatorOccupants,
-        int[] waitingUp,
-        int[] waitingDown)
+        Building building,
+        IReadOnlyList<Elevator> fleet)
     {
-        var elevators = new ElevatorSnapshot[elevatorPositions.Length];
-        for (int i = 0; i < elevatorPositions.Length; i++)
+        var elevators = new ElevatorSnapshot[fleet.Count];
+        for (int i = 0; i < fleet.Count; i++)
         {
-            var currentFloor = (int)Math.Round(elevatorPositions[i], MidpointRounding.AwayFromZero);
+            var e = fleet[i];
 
             elevators[i] = new ElevatorSnapshot(
-                VehicleId: i + 1,
-                PositionFloor: elevatorPositions[i],
-                CurrentFloor: currentFloor,
-                TargetFloor: elevatorTargets[i],
-                Direction: elevatorDirections[i],
-                State: elevatorStates[i],
-                Capacity: elevatorCapacities[i],
-                OccupantCount: elevatorOccupants[i],
-                StopQueueFloors: Array.Empty<int>()
+                VehicleId: e.Id,
+                PositionFloor: e.PositionFloor,
+                CurrentFloor: e.CurrentFloor,
+                TargetFloor: e.TargetFloor,
+                Direction: e.Direction,
+                State: e.State,
+                Capacity: e.Capacity,
+                OccupantCount: e.OccupantCount,
+                StopQueueFloors: e.StopQueueFloors.Count == 0 ? Array.Empty<int>() : e.StopQueueFloors.ToArray()
             );
         }
 
-        var floors = new FloorQueueSnapshot[waitingUp.Length];
-        for (int f = 0; f < waitingUp.Length; f++)
+        var floors = new FloorQueueSnapshot[building.FloorCount];
+        for (int f = 0; f < building.FloorCount; f++)
         {
+            var floor = building.GetFloor(f);
+
             floors[f] = new FloorQueueSnapshot(
                 Floor: f,
-                WaitingUp: waitingUp[f],
-                WaitingDown: waitingDown[f],
-                CurrentOccupantsOnFloor: 0
+                WaitingUp: floor.WaitingUpCount,
+                WaitingDown: floor.WaitingDownCount,
+                CurrentOccupantsOnFloor: floor.CurrentOccupantsCount
             );
         }
 

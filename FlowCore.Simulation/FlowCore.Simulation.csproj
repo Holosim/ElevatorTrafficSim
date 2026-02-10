@@ -11,4 +11,9 @@
     <ProjectReference Include="..\FlowCore.Domain\FlowCore.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+    <Folder Include="DispatchStrategies\" />
+  </ItemGroup>
+
 </Project>

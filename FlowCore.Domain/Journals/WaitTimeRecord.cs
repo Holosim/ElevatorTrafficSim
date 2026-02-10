@@ -6,17 +6,27 @@ using System.Threading.Tasks;
 
 namespace FlowCore.Domain.Journals;
 
-public sealed class WaitTimeRecord
-{
-    public required int Id { get; init; }
-    public required int PersonId { get; init; }
-    public required int FloorId { get; init; }
-    public required int TargetDestination { get; init; }
+public readonly record struct WaitTimeRecord(
+    int Id,
+    int PersonId,
+    int FloorId,
+    int TargetDestination,
+    double TimeInQueueSeconds
+);
 
-    public required double RequestedAt { get; init; }
-    public required double PickedUpAt { get; init; }
+/* Why did we remove the functions from this?*/
 
-    public required double TimeInQueueSeconds { get; init; }
-    public required int VehicleId { get; init; }
-}
+//public sealed class WaitTimeRecord
+//{
+//    public required int Id { get; init; }
+//    public required int PersonId { get; init; }
+//    public required int FloorId { get; init; }
+//    public required int TargetDestination { get; init; }
+
+//    public required double RequestedAt { get; init; }
+//    public required double PickedUpAt { get; init; }
+
+//    public required double TimeInQueueSeconds { get; init; }
+//    public required int VehicleId { get; init; }
+//}
 

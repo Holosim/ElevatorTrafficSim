@@ -8,11 +8,10 @@ namespace FlowCore.Domain.Journals;
 
 public sealed class PersonRoundTrip
 {
-    public required int Id { get; init; }
-    public required int PersonId { get; init; }
+    public int Id { get; init; }
+    public int PersonId { get; init; }
     public double TotalTimeSeconds { get; set; }
-    public List<int> TripLegRecordIds { get; } = new();
+    public List<TripLegRecord> Legs { get; } = new();
 }
-
 
 

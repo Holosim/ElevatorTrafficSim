@@ -12,13 +12,24 @@ public sealed class Building
 
     public Building(int floorCount)
     {
-        if (floorCount <= 0) throw new ArgumentOutOfRangeException(nameof(floorCount));
-        _floors = Enumerable.Range(0, floorCount).Select(i => new Floor(i)).ToList();
+        if (floorCount <= 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
+
+        _floors = new List<Floor>(capacity: floorCount);
+        for (int i = 0; i < floorCount; i++)
+            _floors.Add(new Floor(i));
     }
 
     public int FloorCount => _floors.Count;
+
     public IReadOnlyList<Floor> Floors => _floors;
 
-    public Floor GetFloor(int floorNumber) => _floors[floorNumber];
+    public Floor GetFloor(int floorNumber)
+    {
+        if (floorNumber < 0 || floorNumber >= _floors.Count)
+            throw new ArgumentOutOfRangeException(nameof(floorNumber));
+
+        return _floors[floorNumber];
+    }
 }
+
 

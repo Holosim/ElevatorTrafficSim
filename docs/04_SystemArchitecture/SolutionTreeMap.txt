@@ -1,0 +1,120 @@
+ElevatorTrafficSim
+│   ├─── ElevatorTrafficSimulator.sln
+│   ├─── LICENSE
+│   └─── README.md
+│
+├───docs
+│   ├─── ElevatorSimulator_Documentation_Flow.xlsx
+│   ├─── Workflow.txt
+│   │
+│   ├───00_Project_Definition
+│   │       ├─── Business or Mission Analysis.txt
+│   │       ├─── S1_Requirement_Refinement.docx
+│   │       └─── S1_Simulation Strategy and Scaffolding for Simple Elevator.docx
+│   │
+│   ├───01_Business_Analysis
+│   │       ├─── S1_Mission-Value_Statements.docx
+│   │       └─── S1_Stakeholder_Analysis.docx
+│   │
+│   ├───02_Stakeholder_Need
+│   │       └─── ElevatorSimulator_Stakeholder_Need.xlsx
+│   │
+│   ├───03_RTVM
+│   │       └─── ElevatorSimulator_RequirementsTraceabilityMatrix.xlsx
+│   │
+│   ├───04_SystemArchitecture
+│   │       ├─── SolutionTreeMap.txt  (this file)
+│   │       ├─── Standard-Elevator-Use-Case-Diagram.png
+│   │       ├─── Step 4_ System Architecture and Design (SysML Diagrams) for Elevator Simulator - Copy.docx
+│   │       └─── SysML_Diagram-UseCaseDiagram(UCD).docx
+│   │
+│   ├───05_Implementation Planning – UML Class Diagram & Code Scaffolding
+│   │   	├─── ElevatorDecisionTree.pptx
+│   │   	└─── Step 5_ Implementation Planning – UML Class Diagram & Code Scaffolding.docx
+│   │  
+│   └───z_Reference
+│           └─── Business or Mission Analysis - SEBoK.url
+│
+├───ElevatorTrafficSimulator.ConsoleHost
+│   ├─── ElevatorTrafficSimulator.ConsoleHost.csproj
+│   ├─── Program.cs
+│   │
+│   └───Publishing
+│           ├─── IContractPublisher.cs
+│           ├─── JsonPayload.cs
+│           └─── NdjsonContractPublisher.cs
+│
+├───FlowCore.Contracts
+│   ├─── FlowCore.Contracts.csproj
+│   │
+│   ├───Common
+│   │       ├─── ContractVersion.cs
+│   │       └─── Enums.cs
+│   │
+│   ├───Events
+│   │       ├─── Payloads.cs
+│   │       ├─── SimEventRecord.cs
+│   │       └─── SimEventTypes.cs
+│   │
+│   │
+│   ├───Reports
+│   │       └─── SimulationReport.cs
+│   │
+│   └───Snapshots
+│           ├─── ElevatorSnapshot.cs
+│           ├─── FloorQueueSnapshot.cs
+│           └─── SimTickSnapshot.cs
+│
+├───FlowCore.Domain
+│   ├─── FlowCore.Domain.csproj
+│   │
+│   ├───Building
+│   │       ├─── Building.cs
+│   │       └─── Floor.cs
+│   │
+│   ├───Common
+│   │       ├─── PassengerType.cs
+│   │       └─── PersonState.cs
+│   │
+│   ├───Journals
+│   │       ├─── PersonRoundTrip.cs
+│   │       ├─── TrafficJournal.cs
+│   │       ├─── TripLegRecord.cs
+│   │       └─── WaitTimeRecord.cs
+│   │
+│   ├───People
+│   │       └─── Person.cs
+│   │
+│   ├───Requests
+│   │       └─── CallRequest.cs
+│   │
+│   └───Routing
+│           ├─── Destination.cs
+│           └─── Route.cs
+│
+└───FlowCore.Simulation
+    ├─── FlowCore.Simulation.csproj
+    │
+    ├───Adapters
+    │       ├─── BuildingReadModel.cs
+    │       ├─── ElevatorReadModel.cs
+    │       ├─── IBuildingReadModel.cs
+    │       ├─── IVehicleReadModel.cs
+    │       └─── SimSnapshotAssembler.cs
+    │
+    ├───Events
+    │       ├─── ContractEventAdapter.cs
+    │       ├─── DomainEvents.cs
+    │       ├─── EventBatcher.cs
+    │       ├─── EventBatcherNoDrop.cs
+    │       ├─── IEventBus.cs
+    │       ├─── InMemoryEventBus.cs
+    │       └─── JsonPayload.cs
+    │
+    │
+    └───Publishing
+            ├─── SnapshotPublisherCoalescing.cs
+            └─── SnapshotThrottler.cs
+ 
+
+    

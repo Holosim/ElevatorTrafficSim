@@ -35,9 +35,11 @@ public sealed class SimSnapshotAssembler
                 Floor: f.FloorNumber,
                 WaitingUp: f.WaitingUpCalls.Count,
                 WaitingDown: f.WaitingDownCalls.Count,
-                CurrentOccupantsOnFloor: f.CurrentOccupants.Count
+                CurrentOccupantsOnFloor: f.CurrentOccupantsCount
             );
         }
+
+        /* Question: Why was there an error in CurrentOCcupantsCount versus CurrentOccupants.Count?*/
 
         // Vehicles: produce new snapshots and copy stop queues
         var elevatorSnapshots = new ElevatorSnapshot[vehicles.Count];

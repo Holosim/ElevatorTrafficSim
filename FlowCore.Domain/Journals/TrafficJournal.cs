@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 public sealed class TrafficJournal
 {
     public List<PersonRoundTrip> RoundTrips { get; } = new();
-    public List<TripLegRecord> TripLegs { get; } = new();
+
+    /* Why did we move this to TripLegRecord? */
+    //public List<TripLegRecord> TripLegs { get; } = new();
+
     public List<WaitTimeRecord> WaitTimes { get; } = new();
 }

@@ -11,11 +11,28 @@ namespace FlowCore.Domain.People;
 
 public sealed class Person
 {
-    public required int Id { get; init; }
-    public required PassengerType Type { get; init; }
-    public required Route Route { get; init; }
+    public Person(int id, PassengerType type, int startFloor, Route route)
+    {
+        if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+        if (route is null) throw new ArgumentNullException(nameof(route));
+
+        Id = id;
+        Type = type;
+        CurrentFloor = startFloor;
+        Route = route;
+
+        State = PersonState.NotSpawned;
+    }
+
+    public int Id { get; }
+    public PassengerType Type { get; }
+    public Route Route { get; }
+
+    public PersonState State { get; set; }
 
     public int CurrentFloor { get; set; }
-    public int RouteIndex { get; set; } = 0;
-    public PersonState State { get; set; } = PersonState.NotSpawned;
+
+    // Trip bookkeeping. Minimal. Use events/journals for full history.
+    public int? ActiveCallId { get; set; }
 }
+
