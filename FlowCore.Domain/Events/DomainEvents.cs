@@ -30,6 +30,16 @@ public readonly record struct PersonBoardedDomainEvent(
     int VehicleOccupantCountAfter
 ) : IDomainEvent;
 
+public readonly record struct PersonAlightedDomainEvent(
+    double T,
+    string Source,
+    int PersonId,
+    int CallId,
+    int VehicleId,
+    int Floor,
+    int VehicleOccupantCountAfter
+) : IDomainEvent;
+
 public readonly record struct QueueSizeChangedDomainEvent(
     double T,
     string Source,
