@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using FlowCore.Contracts.Common;
+﻿using FlowCore.Contracts.Common;
 
 namespace FlowCore.Simulation;
 
@@ -12,8 +7,7 @@ public sealed class Elevator
     private readonly List<int> _passengers = new();
     private readonly List<int> _stopQueueFloors = new();
 
-    // Timing state (seconds remaining in current sub-state)
-    private double _stateTimeRemaining;
+    private double _stateTimeRemainingSeconds;
 
     public Elevator(int id, int capacity, int startFloor = 0)
     {
@@ -28,13 +22,16 @@ public sealed class Elevator
 
         Direction = MotionDirection.Idle;
         State = VehicleState.Idle;
-        _stateTimeRemaining = 0;
+
+        _stateTimeRemainingSeconds = 0;
     }
 
     public int Id { get; }
     public int Capacity { get; }
 
     public double PositionFloor { get; private set; }
+
+    // A stable floor index for “arrived at floor” logic
     public int CurrentFloor => (int)Math.Round(PositionFloor, MidpointRounding.AwayFromZero);
 
     public int? TargetFloor { get; private set; }
@@ -43,99 +40,94 @@ public sealed class Elevator
     public VehicleState State { get; private set; }
 
     public int OccupantCount => _passengers.Count;
+
     public IReadOnlyList<int> StopQueueFloors => _stopQueueFloors;
 
-    // --- New: expose door/load timing for snapshots/debugging if needed ---
-    public double StateTimeRemaining => _stateTimeRemaining;
+    public double StateTimeRemainingSeconds => _stateTimeRemainingSeconds;
 
-    // --- Minimal API for controller to schedule work ---
-    public void AssignTarget(int floor)
-    {
-        TargetFloor = floor;
+    public bool IsAtCapacity => _passengers.Count >= Capacity;
 
-        if (floor == CurrentFloor)
-        {
-            // Already here: go directly to doors open (controller can decide).
-            State = VehicleState.DoorsOpen;
-            Direction = MotionDirection.Idle;
-            _stateTimeRemaining = 0;
-            return;
-        }
-
-        State = VehicleState.Moving;
-        Direction = floor > CurrentFloor ? MotionDirection.Up : MotionDirection.Down;
-        _stateTimeRemaining = 0;
-    }
-
-    /// <summary>
-    /// Called when elevator should begin a "doors open dwell".
-    /// </summary>
-    public void BeginDoorsOpen(double dwellSeconds)
-    {
-        State = VehicleState.DoorsOpen;
-        Direction = MotionDirection.Idle;
-        _stateTimeRemaining = Math.Max(0, dwellSeconds);
-    }
-
-    /// <summary>
-    /// Called to begin boarding for N people. 1.0s per person.
-    /// </summary>
-    public void BeginBoarding(int peopleCount)
-    {
-        State = VehicleState.Loading;
-        Direction = MotionDirection.Idle;
-        _stateTimeRemaining = Math.Max(0, peopleCount) * 1.0;
-    }
-
-    /// <summary>
-    /// Called to begin unloading for N people. 0.5s per person.
-    /// </summary>
-    public void BeginUnloading(int peopleCount)
-    {
-        State = VehicleState.Unloading;
-        Direction = MotionDirection.Idle;
-        _stateTimeRemaining = Math.Max(0, peopleCount) * 0.5;
-    }
-
-    public void CloseDoors()
-    {
-        State = VehicleState.Idle;
-        Direction = MotionDirection.Idle;
-        _stateTimeRemaining = 0;
-    }
-
+    public bool ContainsPassenger(int personId) => _passengers.Contains(personId);
 
     public void AddPassenger(int personId)
     {
-        if (_passengers.Count >= Capacity) throw new InvalidOperationException("Elevator at capacity.");
+        if (IsAtCapacity) throw new InvalidOperationException("Elevator is at capacity.");
         _passengers.Add(personId);
     }
 
     public bool RemovePassenger(int personId) => _passengers.Remove(personId);
 
-    public bool ContainsPassenger(int personId) => _passengers.Contains(personId);
+    /// <summary>
+    /// Controller sets a new motion target. If already at that floor, elevator enters DoorsOpen state immediately.
+    /// </summary>
+    public void SetTarget(int floor)
+    {
+        TargetFloor = floor;
 
+        if (floor == CurrentFloor)
+        {
+            Direction = MotionDirection.Idle;
+            State = VehicleState.DoorsOpen;
+            _stateTimeRemainingSeconds = 0;
+            return;
+        }
+
+        Direction = floor > CurrentFloor ? MotionDirection.Up : MotionDirection.Down;
+        State = VehicleState.Moving;
+        _stateTimeRemainingSeconds = 0;
+    }
+
+    public void BeginDoorDwell(double dwellSeconds)
+    {
+        State = VehicleState.DoorsOpen;
+        Direction = MotionDirection.Idle;
+        _stateTimeRemainingSeconds = Math.Max(0, dwellSeconds);
+    }
+
+    public void BeginBoarding(int peopleCount)
+    {
+        // 1.0 second per person
+        State = VehicleState.Loading;
+        Direction = MotionDirection.Idle;
+        _stateTimeRemainingSeconds = Math.Max(0, peopleCount) * 1.0;
+    }
+
+    public void BeginUnloading(int peopleCount)
+    {
+        // 0.5 seconds per person
+        State = VehicleState.Unloading;
+        Direction = MotionDirection.Idle;
+        _stateTimeRemainingSeconds = Math.Max(0, peopleCount) * 0.5;
+    }
+
+    public void CloseDoorsToIdle()
+    {
+        State = VehicleState.Idle;
+        Direction = MotionDirection.Idle;
+        _stateTimeRemainingSeconds = 0;
+    }
+
+    /// <summary>
+    /// Advances mechanics by dtSim. Controller handles call lifecycle decisions.
+    /// </summary>
     public void Update(double dtSimSeconds, double speedFloorsPerSecond)
     {
         if (dtSimSeconds <= 0) return;
 
-        // Timed states. DoorsOpen, Loading, Unloading, DoorsClosed (instant)
+        // Timed states: DoorsOpen dwell, Loading, Unloading.
         if (State is VehicleState.DoorsOpen or VehicleState.Loading or VehicleState.Unloading)
         {
-            _stateTimeRemaining -= dtSimSeconds;
-            if (_stateTimeRemaining <= 0)
-            {
-                _stateTimeRemaining = 0;
-                // Controller decides next transition. We simply mark state as DoorsOpenComplete
-                // by using DoorsOpen with timeRemaining==0, or set DoorsClosed.
-                // Keep it simple: do nothing here.
-            }
+            _stateTimeRemainingSeconds -= dtSimSeconds;
+            if (_stateTimeRemainingSeconds < 0)
+                _stateTimeRemainingSeconds = 0;
+
             return;
         }
 
         if (State != VehicleState.Moving || TargetFloor is null) return;
 
         var target = TargetFloor.Value;
+
         var deltaFloors = speedFloorsPerSecond * dtSimSeconds;
 
         if (PositionFloor < target)
@@ -149,12 +141,13 @@ public sealed class Elevator
             PositionFloor = Math.Max(target, PositionFloor - deltaFloors);
         }
 
+        // Arrival check
         if (Math.Abs(PositionFloor - target) < 1e-6)
         {
-            // Arrived. Controller will choose door operations.
-            State = VehicleState.DoorsOpen;
+            PositionFloor = target;
             Direction = MotionDirection.Idle;
-            _stateTimeRemaining = 0;
+            State = VehicleState.DoorsOpen;
+            _stateTimeRemainingSeconds = 0;
         }
     }
 }

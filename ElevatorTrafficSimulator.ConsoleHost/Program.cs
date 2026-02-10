@@ -111,7 +111,7 @@ internal static class Program
 
         var person = new Person(
             id: 1,
-            type: FlowCore.Contracts.Common.PassengerType.OfficeWorker,
+            type: FlowCore.Domain.Common.PassengerType.OfficeWorker,
             startFloor: 0,
             route: route);
 

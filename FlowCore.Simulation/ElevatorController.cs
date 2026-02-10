@@ -1,12 +1,6 @@
 ﻿using FlowCore.Domain.Building;
-using FlowCore.Domain.Events;
 using FlowCore.Domain.Requests;
 using FlowCore.Simulation.Events;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FlowCore.Simulation;
 
@@ -16,11 +10,46 @@ public sealed class ElevatorController
     private readonly IElevatorDispatchStrategy _strategy;
     private readonly List<Elevator> _fleet;
 
-    // Minimal: pending calls FIFO
     private readonly Queue<CallRequest> _pendingCalls = new();
+    private readonly Dictionary<int, ActiveAssignment> _active = new();
 
-    // Minimal: one active call per elevator
-    private readonly Dictionary<int, CallRequest> _activeCallByElevatorId = new();
+    // Tunables for v1
+    private const double DoorDwellSeconds = 2.0;
+
+    private sealed class ActiveAssignment
+    {
+        public ActiveAssignment(CallRequest call)
+        {
+            Call = call;
+            Phase = AssignmentPhase.GoingToPickup;
+            HasDequeuedFromFloorQueue = false;
+            HasBoarded = false;
+            HasUnloaded = false;
+            DoorDwellStartedAtPickup = false;
+            DoorDwellStartedAtDropoff = false;
+        }
+
+        public CallRequest Call { get; }
+        public AssignmentPhase Phase { get; set; }
+
+        public bool HasDequeuedFromFloorQueue { get; set; }
+        public bool HasBoarded { get; set; }
+        public bool HasUnloaded { get; set; }
+
+        public bool DoorDwellStartedAtPickup { get; set; }
+        public bool DoorDwellStartedAtDropoff { get; set; }
+    }
+
+    private enum AssignmentPhase
+    {
+        GoingToPickup,
+        DoorDwellAtPickup,
+        Boarding,
+        GoingToDropoff,
+        DoorDwellAtDropoff,
+        Unloading,
+        Complete
+    }
 
     public ElevatorController(IEventBus bus, IElevatorDispatchStrategy strategy, IEnumerable<Elevator> fleet)
     {
@@ -32,114 +61,168 @@ public sealed class ElevatorController
 
     public IReadOnlyList<Elevator> Fleet => _fleet;
 
-    public void SubmitCall(in CallRequest call) => _pendingCalls.Enqueue(call);
+    public void SubmitCall(CallRequest call) => _pendingCalls.Enqueue(call);
 
     public void Update(Building building, double tSim, double dtSimSeconds)
     {
-        // 1) Assign pending calls to idle elevators
+        if (building is null) throw new ArgumentNullException(nameof(building));
+
+        AssignPendingCalls(tSim);
+
+        foreach (var elevator in _fleet)
+        {
+            if (!_active.TryGetValue(elevator.Id, out var assignment))
+                continue;
+
+            StepAssignment(building, elevator, assignment, tSim);
+            if (assignment.Phase == AssignmentPhase.Complete)
+                _active.Remove(elevator.Id);
+        }
+    }
+
+    private void AssignPendingCalls(double tSim)
+    {
+        // Assign pending calls to elevators that have no active assignment.
         while (_pendingCalls.Count > 0)
         {
             var call = _pendingCalls.Peek();
 
             var elevatorId = _strategy.SelectElevator(_fleet, call);
+
+            if (_active.ContainsKey(elevatorId))
+                break; // best candidate is busy. stop assigning for now.
+
             var elevator = _fleet.First(e => e.Id == elevatorId);
 
-            // only assign if elevator not already handling a call
-            if (_activeCallByElevatorId.ContainsKey(elevatorId))
-                break;
-
             _pendingCalls.Dequeue();
-            _activeCallByElevatorId[elevatorId] = call;
+            _active[elevatorId] = new ActiveAssignment(call);
 
-            // Publish domain event (adapter will convert)
-            _bus.Publish(new CallAssignedDomainEvent(
-                T: tSim,
-                Source: "ElevatorController",
-                CallId: call.CallId,
-                VehicleId: elevatorId,
-                EstimatedPickupT: double.NaN // compute later
-            ));
+            // If you already have this event defined, keep it. Otherwise comment it temporarily.
+            // _bus.Publish(new CallAssignedDomainEvent(T: tSim, Source: "ElevatorController", CallId: call.CallId, VehicleId: elevatorId, EstimatedPickupT: double.NaN));
 
-            elevator.AssignTarget(call.OriginFloor);
+            elevator.SetTarget(call.OriginFloor);
         }
+    }
 
-        // 2) For each elevator with an active call, advance its call lifecycle
-        foreach (var elevator in _fleet)
+    private void StepAssignment(Building building, Elevator elevator, ActiveAssignment a, double tSim)
+    {
+        var call = a.Call;
+
+        switch (a.Phase)
         {
-            if (!_activeCallByElevatorId.TryGetValue(elevator.Id, out var call))
-                continue;
+            case AssignmentPhase.GoingToPickup:
+                {
+                    // Wait until elevator arrives at pickup floor and doors are open
+                    if (elevator.CurrentFloor == call.OriginFloor && elevator.State == FlowCore.Contracts.Common.VehicleState.DoorsOpen)
+                    {
+                        a.Phase = AssignmentPhase.DoorDwellAtPickup;
+                    }
+                    break;
+                }
 
-            // If elevator arrived at origin and doors are open, board 1 person for now (v1)
-            if (elevator.State == FlowCore.Contracts.Common.VehicleState.DoorsOpen
-                && elevator.CurrentFloor == call.OriginFloor
-                && !elevator.ContainsPassenger(call.PersonId))
-            {
-                // Begin boarding time (1 person => 1 second)
-                elevator.BeginBoarding(1);
+            case AssignmentPhase.DoorDwellAtPickup:
+                {
+                    if (!a.DoorDwellStartedAtPickup)
+                    {
+                        a.DoorDwellStartedAtPickup = true;
+                        elevator.BeginDoorDwell(DoorDwellSeconds);
+                    }
 
-                // Remove from floor queue (minimal: direction-based)
-                var floor = building.GetFloor(call.OriginFloor);
-                // For v1: assume the person is at front. Later: explicit person removal.
-                if (call.Direction == 1 && floor.WaitingUpCount > 0) floor.DequeueUp();
-                if (call.Direction == 2 && floor.WaitingDownCount > 0) floor.DequeueDown();
+                    if (elevator.StateTimeRemainingSeconds <= 0)
+                    {
+                        a.Phase = AssignmentPhase.Boarding;
+                    }
+                    break;
+                }
 
-                elevator.AddPassenger(call.PersonId);
+            case AssignmentPhase.Boarding:
+                {
+                    if (!a.HasBoarded)
+                    {
+                        // Minimal v1: board exactly the requested person (1 pax)
+                        if (elevator.IsAtCapacity)
+                        {
+                            // In v1, if at capacity, we just keep trying next tick.
+                            // Later: emit CapacityHit event and requeue.
+                            return;
+                        }
 
-                _bus.Publish(new PersonBoardedDomainEvent(
-                    T: tSim,
-                    Source: $"Elevator#{elevator.Id}",
-                    PersonId: call.PersonId,
-                    CallId: call.CallId,
-                    VehicleId: elevator.Id,
-                    Floor: call.OriginFloor,
-                    VehicleOccupantCountAfter: elevator.OccupantCount
-                ));
+                        // Remove from floor queue only once
+                        if (!a.HasDequeuedFromFloorQueue)
+                        {
+                            a.HasDequeuedFromFloorQueue = true;
 
-                continue;
-            }
+                            var floor = building.GetFloor(call.OriginFloor);
 
-            // If boarding finished, send elevator to destination
-            if (elevator.State == FlowCore.Contracts.Common.VehicleState.Loading
-                && elevator.StateTimeRemaining <= 0
-                && elevator.ContainsPassenger(call.PersonId))
-            {
-                elevator.CloseDoors();
-                elevator.AssignTarget(call.DestinationFloor);
-                continue;
-            }
+                            // v1 assumption: the person is at the head of the queue.
+                            if (call.Direction == 1 && floor.WaitingUpCount > 0) floor.DequeueUp();
+                            if (call.Direction == 2 && floor.WaitingDownCount > 0) floor.DequeueDown();
+                        }
 
-            // If elevator arrived at destination, unload
-            if (elevator.State == FlowCore.Contracts.Common.VehicleState.DoorsOpen
-                && elevator.CurrentFloor == call.DestinationFloor
-                && elevator.ContainsPassenger(call.PersonId))
-            {
-                elevator.BeginUnloading(1);
+                        elevator.AddPassenger(call.PersonId);
+                        elevator.BeginBoarding(peopleCount: 1);
+                        a.HasBoarded = true;
 
-                // We remove immediately but you could delay until unload completes.
-                elevator.RemovePassenger(call.PersonId);
+                        // If you already have this event defined, keep it. Otherwise comment it temporarily.
+                        // _bus.Publish(new PersonBoardedDomainEvent(T: tSim, Source: $"Elevator#{elevator.Id}", PersonId: call.PersonId, CallId: call.CallId, VehicleId: elevator.Id, Floor: call.OriginFloor, VehicleOccupantCountAfter: elevator.OccupantCount));
+                    }
 
-                // Optional domain event: PersonAlightedDomainEvent (add later)
-                // For now keep it minimal so you can see board->ride->arrive.
+                    if (elevator.StateTimeRemainingSeconds <= 0)
+                    {
+                        elevator.CloseDoorsToIdle();
+                        elevator.SetTarget(call.DestinationFloor);
+                        a.Phase = AssignmentPhase.GoingToDropoff;
+                    }
 
-                continue;
-            }
+                    break;
+                }
 
-            // If unloading complete, mark call complete and idle
-            if (elevator.State == FlowCore.Contracts.Common.VehicleState.Unloading
-                && elevator.StateTimeRemaining <= 0
-                && !elevator.ContainsPassenger(call.PersonId))
-            {
-                elevator.CloseDoors();
+            case AssignmentPhase.GoingToDropoff:
+                {
+                    if (elevator.CurrentFloor == call.DestinationFloor && elevator.State == FlowCore.Contracts.Common.VehicleState.DoorsOpen)
+                    {
+                        a.Phase = AssignmentPhase.DoorDwellAtDropoff;
+                    }
+                    break;
+                }
 
-                // Done
-                _activeCallByElevatorId.Remove(elevator.Id);
-                // Elevator idle for now. Later: return-to-lobby policy.
-                // If no target, set idle.
-                // We'll leave it as DoorsClosed; next tick it will be available again.
+            case AssignmentPhase.DoorDwellAtDropoff:
+                {
+                    if (!a.DoorDwellStartedAtDropoff)
+                    {
+                        a.DoorDwellStartedAtDropoff = true;
+                        elevator.BeginDoorDwell(DoorDwellSeconds);
+                    }
 
-                continue;
-            }
+                    if (elevator.StateTimeRemainingSeconds <= 0)
+                    {
+                        a.Phase = AssignmentPhase.Unloading;
+                    }
+                    break;
+                }
+
+            case AssignmentPhase.Unloading:
+                {
+                    if (!a.HasUnloaded)
+                    {
+                        // Minimal v1: unload the single person.
+                        if (elevator.ContainsPassenger(call.PersonId))
+                            elevator.RemovePassenger(call.PersonId);
+
+                        elevator.BeginUnloading(peopleCount: 1);
+                        a.HasUnloaded = true;
+
+                        // Later: publish PersonAlightedDomainEvent
+                    }
+
+                    if (elevator.StateTimeRemainingSeconds <= 0)
+                    {
+                        elevator.CloseDoorsToIdle();
+                        a.Phase = AssignmentPhase.Complete;
+                    }
+
+                    break;
+                }
         }
     }
 }
-
