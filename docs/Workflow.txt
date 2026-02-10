@@ -68,7 +68,6 @@
 	- Breakdown each diagram into classes and methdos.
 	- SysML
 	- UML Diagrams
-	
 7. Begin Building code file structure
 	- First step in actual coding
 	- Configure project types for the entire solution
@@ -78,10 +77,27 @@
 	- Configure classes	
 		- One File Per Object
 		- Populate with properties and methods
+	- Organize code files into folders
+		- Group by function type (models, dataAccess, UI, etc)
 	- Code will only be stubs of non-functional, but compilable, code.
 		- Comment for structure
-8. Wire up data structure
-9. Test and Adjust
+	- Use placeholders to represent data input/output.
+	- Use configuration files to for application-wide definition data.
+		- GlobalConfig file 
+		- App.config
+8. Build server database
+	- Tables
+	- Stored Procedures
+	- Wire up data IO connection classes using Interface to allow for futre changes, expansion, improvement
+9. Refine the funcional code
+	- Use an Agile iterative approach
+	- Refine database as needed.
+	- End each programming session with buildable code.
+	- Validate each function and workflow at the component level as they are created.
+	- Push to repo daily.
+
+10. Test and Adjust
+	- a
 	
 	
 

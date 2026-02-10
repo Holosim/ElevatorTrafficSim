@@ -4,15 +4,47 @@ using System.IO;
 
 /*
  * Code Explanation
- * In summary, DataLogger provides a lightweight mechanism to collect and persist event messages in the elevator simulation. It supports console and file logging, buffers entries to avoid frequent I/O, and offers two ways to write the buffer to a file: Flush (append and clear) and SaveReport (overwrite without clearing).
- *  Purpose: The DataLogger class is a utility for recording simulation events. It is designed to log messages both to the console (for immediate feedback) and to a file (for later review or analysis), without letting I/O operations slow down the simulation.
+ * In summary, DataLogger provides a lightweight mechanism to collect and persist event messages in the 
+ * elevator simulation. It supports console and file logging, buffers entries to avoid frequent I/O, 
+ * and offers two ways to write the buffer to a file: 
+ *      - Flush (append and clear) 
+ *      - SaveReport (overwrite without clearing)
+ *      
+ *  Purpose: The DataLogger class is a utility for recording simulation events. 
+ *           It is designed to log messages both to the console (for immediate feedback) 
+ *           and to a file (for later review or analysis), 
+ *           without letting I/O operations slow down the simulation.
  *  Fields:
- *      logFilePath stores the path to the file where log entries should be saved. It is initialised to an empty string if no path is provided, effectively disabling file logging.
- *      eventBuffer is a list of strings holding all logged events in memory until they are flushed. Buffering allows the simulation to defer disk writes and therefore avoids frequent file I/O, which could introduce timing artefacts.
- *  Constructor: The constructor accepts an optional logFilePath. If the argument is null, it assigns an empty string to logFilePath, meaning no file output will occur. It also instantiates the eventBuffer. This design makes the logger flexible: it can log to the console only, to a file, or both, depending on the provided path.
- *  LogEvent method: This method formats a log message by prefixing it with a timestamp in HH:mm:ss format. It then appends the formatted message to eventBuffer and writes it to Console.WriteLine, providing immediate feedback. The method returns void because it only performs side effects.
- *  lush method: When called, Flush checks whether a log file path was provided and whether there are any buffered entries. If both are true, it appends all buffered entries to the file and clears the buffer. Clearing the buffer ensures that the same entries are not written again on the next flush. If no file path is specified or the buffer is empty, Flush does nothing.
- *  SaveReport method: This method writes the entire contents of eventBuffer to the log file in one call to File.WriteAllLines, overwriting any existing content. It does not clear the buffer afterwards. Because of this, repeatedly calling SaveReport can result in duplicate entries being written to the file. This method might be used to generate a report at a particular point in time, leaving the buffer untouched so that it can still be flushed or saved later.
+ *      logFilePath - stores the path to the file where log entries should be saved. 
+ *                    It is initialised to an empty string if no path is provided,
+ *                    effectively disabling file logging.
+ *      eventBuffer - is a list of strings holding all logged events in memory until they are flushed. 
+ *                    Buffering allows the simulation to defer disk writes and therefore avoids frequent file I/O,
+ *                    which could introduce timing artefacts.
+ *                    
+ *  Constructor: 
+ *      The constructor accepts an optional logFilePath. 
+ *      If the argument is null, it assigns an empty string to logFilePath, meaning no file output will occur. 
+ *      It also instantiates the eventBuffer. This design makes the logger flexible: it can log to the console only,
+ *      to a file, or both, depending on the provided path.
+ * 
+ *  LogEvent method: 
+ *      This method formats a log message by prefixing it with a timestamp in HH:mm:ss format. 
+ *      It then appends the formatted message to eventBuffer and writes it to Console.WriteLine, 
+ *      providing immediate feedback. The method returns void because it only performs side effects.
+ *  
+ *  Flush method: 
+ *      When called, Flush checks whether a log file path was provided and whether there are any buffered entries. 
+ *      If both are true, it appends all buffered entries to the file and clears the buffer.
+ *      Clearing the buffer ensures that the same entries are not written again on the next flush. 
+ *      If no file path is specified or the buffer is empty, Flush does nothing.
+ *  
+ *  SaveReport method: 
+ *      This method writes the entire contents of eventBuffer to the log file in one call to File.WriteAllLines, 
+ *      overwriting any existing content. It does not clear the buffer afterwards. 
+ *      Because of this, repeatedly calling SaveReport can result in duplicate entries being written to the file.
+ *      This method might be used to generate a report at a particular point in time, leaving the buffer untouched 
+ *      so that it can still be flushed or saved later.
 */
 
 namespace ElevatorSim.DataIO

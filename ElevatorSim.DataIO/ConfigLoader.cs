@@ -6,12 +6,26 @@ using System.Threading.Tasks;
 
 /*
  * Explanation of the ConfigLoader class
- * The ConfigLoader class is a utility responsible for providing configuration data to the elevator simulation. Configuration defines how many floors are in the building, how many elevators are installed, each elevator’s capacity, and any other settings you might need to control the simulation’s behavior (like passenger arrival rates, dispatch strategies, etc.)
- * Class definition: The class lives under the ElevatorSim.DataIO namespace because it deals with input/output—reading data from outside the program. The class contains a single public method and no state.
- * LoadConfig method: This method is intended to read a file from disk (or another source) specified by filePath and convert its contents into a SimulationConfig object. SimulationConfig is presumably a simple data container class (not shown here) with properties such as NumFloors, NumElevators, and ElevatorCapacity.
- * Current implementation: In the provided version, LoadConfig doesn’t actually access the file system. Instead, it returns a SimulationConfig instance with hard-coded defaults—ten floors, three elevators, capacity of eight passengers each. These values allow the rest of the simulation to run even without an external configuration file. The comments indicate that a real implementation is planned (“TODO: Read the file and deserialize...”), suggesting that the method will later use JSON or XML deserialization to populate SimulationConfig with real values from a file.
- * Extensibility: By isolating configuration logic in this class, the system can easily support different input formats or sources without changing the rest of the code. When the TODO is addressed, you might use System.Text.Json or Newtonsoft.Json to parse JSON, or System.Xml for XML, assigning file contents to the properties of SimulationConfig.
- * Overall, the ConfigLoader is meant to be the entry point for external configuration; it currently returns default values so that the simulation can run, but the design makes it straightforward to add proper file parsing in the future.
+ * The ConfigLoader class is a utility responsible for providing configuration data to the elevator simulation. 
+ * Configuration defines how many floors are in the building, how many elevators are installed, each elevator’s capacity, 
+ * and any other settings you might need to control the simulation’s behavior (like passenger arrival rates, dispatch strategies, etc.)
+ * 
+ * Class definition:    The class lives under the ElevatorSim.DataIO namespace because it deals with input/output—reading data from outside the program. 
+ *                      The class contains a single public method and no state.
+ *                      
+ * LoadConfig method:   This method is intended to read a file from disk (or another source) specified by filePath and convert its contents into a SimulationConfig object. 
+ *                      SimulationConfig is presumably a simple data container class (not shown here) with properties such as NumFloors, NumElevators, and ElevatorCapacity.
+ * 
+ * Current implementation:  In the provided version, LoadConfig doesn’t actually access the file system. 
+ *                          Instead, it returns a SimulationConfig instance with hard-coded defaults—ten floors, three elevators, capacity of eight passengers each. 
+ *                          These values allow the rest of the simulation to run even without an external configuration file. 
+ *                          The comments indicate that a real implementation is planned (“TODO: Read the file and deserialize...”), 
+ *                          suggesting that the method will later use JSON or XML deserialization to populate SimulationConfig with real values from a file.
+ *                          
+ * Extensibility:   By isolating configuration logic in this class, the system can easily support different input formats or sources without changing the rest of the code. 
+ *                  When the TODO is addressed, you might use System.Text.Json or Newtonsoft.Json to parse JSON, or System.Xml for XML, assigning file contents to the properties of SimulationConfig.
+ *                  Overall, the ConfigLoader is meant to be the entry point for external configuration; it currently returns default values so that the simulation can run, 
+ *                  but the design makes it straightforward to add proper file parsing in the future.
  */
 
 namespace ElevatorSim.DataIO

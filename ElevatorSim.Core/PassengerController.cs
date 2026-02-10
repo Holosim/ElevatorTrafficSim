@@ -2,10 +2,22 @@ using System;
 using ElevatorSim.DataIO;
 
 /*Detailed explanation of the class
- * The PassengerController is a lightweight component whose job is to represent the people in the elevator simulation. It interacts closely with the Building and its ElevatorController to add new passengers and initiate elevator requests:
- * Dependencies and constructor: The class holds a single private field, building, which references the Building object representing the simulation environment. The constructor takes a Building parameter and guards against null by throwing ArgumentNullException if the caller passes null. This ensures that every PassengerController has a valid context for elevator requests.
- * Creating passengers: The method CreateAndRequestPassenger takes an origin floor and a destination floor as arguments. It instantiates a new Person object (not shown here but defined elsewhere in the simulation) using those floors. Immediately after creation, it calls building.RequestElevator(originFloor, destinationFloor). That call forwards the request to the elevator controller, which will select an elevator to travel to the origin floor and eventually move the passenger to the destination.
- * Simplification and extensibility: As noted in the comments, this controller currently assumes that passengers appear instantaneously and request an elevator right away. A more sophisticated implementation might simulate arrival patterns or dwell times (for instance, passengers arriving in random intervals or groups). The design leaves room for such future enhancements without changing the overall contract: the controller generates passengers and triggers elevator requests.
+ * The PassengerController is a lightweight component whose job is to represent the people in the elevator simulation. 
+ * It interacts closely with the Building and its ElevatorController to add new passengers and initiate elevator requests:
+ * 
+ * Dependencies and constructor:    The class holds a single private field, building, which references the Building object representing the simulation environment. 
+ *                                  The constructor takes a Building parameter and guards against null by throwing ArgumentNullException if the caller passes null. 
+ *                                  This ensures that every PassengerController has a valid context for elevator requests.
+ * 
+ * Creating passengers: The method CreateAndRequestPassenger takes an origin floor and a destination floor as arguments. 
+ *                      It instantiates a new Person object (not shown here but defined elsewhere in the simulation) using those floors. 
+ *                      Immediately after creation, it calls building.RequestElevator(originFloor, destinationFloor). 
+ *                      That call forwards the request to the elevator controller, which will select an elevator to travel to the origin floor and eventually move the passenger to the destination.
+ * 
+ * Simplification and extensibility:    As noted in the comments, this controller currently assumes that passengers appear instantaneously and request an elevator right away. 
+ *                                      A more sophisticated implementation might simulate arrival patterns or dwell times (for instance, passengers arriving in random intervals or groups). 
+ *                                      The design leaves room for such future enhancements without changing the overall contract: the controller generates passengers and triggers elevator requests.
+ * 
  * By centralizing passenger creation and elevator requests in one component, the simulation can later add features like different passenger types, arrival schedules, or statistical tracking of wait times in a clean, encapsulated way.
  */
 
