@@ -78,15 +78,15 @@ public sealed class PassengerController
         // 2) Spawn new arrivals per passenger type up to current time.
         foreach (var (ptype, curve) in _curves)
         {
-            // Initialize next arrival if needed
+            // Ensure we have a next arrival scheduled
             var next = _nextArrivalT[ptype];
             if (next <= 0.0 || double.IsPositiveInfinity(next) || next < tSimSeconds)
-                _nextArrivalT[ptype] = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
-            var nextT = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
-            if (double.IsPositiveInfinity(nextT))
-                nextT = tSimSeconds + horizonSeconds; // try again next window
-            _nextArrivalT[ptype] = nextT;
-
+            {
+                next = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
+                if (double.IsPositiveInfinity(next))
+                    next = tSimSeconds + horizonSeconds; // try again later
+                _nextArrivalT[ptype] = next;
+            }
 
             // Spawn all arrivals that happen at or before now
             while (_nextArrivalT[ptype] <= tSimSeconds)
@@ -112,7 +112,6 @@ public sealed class PassengerController
                 EnqueueFloor(building, bus, callUp, tSimSeconds);
 
                 // Schedule return-to-lobby after planned stay (dest -> 0)
-                // (We ignore ride time for now. We’ll refine later with event-driven actual arrival.)
                 var returnT = tSimSeconds + Math.Max(0, dest.PlannedStaySeconds);
 
                 var callDown = new CallRequest(
@@ -126,12 +125,12 @@ public sealed class PassengerController
 
                 _scheduled.Enqueue(new ScheduledCall(callDown), returnT);
 
-                // Compute next arrival time for this type
+                // Now schedule the next arrival *after this time*
+                var nextT = _nhpp.NextArrivalTime(tSimSeconds, curve, horizonSeconds);
+                if (double.IsPositiveInfinity(nextT))
+                    nextT = tSimSeconds + horizonSeconds;
                 _nextArrivalT[ptype] = nextT;
 
-                // If curve is zero for rest of horizon, bail
-                if (double.IsPositiveInfinity(nextT))
-                    break;
             }
         }
 

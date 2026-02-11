@@ -193,6 +193,9 @@ internal static class Program
             foreach (var e in elevatorController.Fleet)
                 e.Update(dtSim, speedFloorsPerSecond);
 
+            if (tick % 25 == 0) // every ~5 seconds of sim-time at dt=0.2
+                Console.WriteLine($"tSim={tSim:F1}, spawned={spawned}, calls={callsSubmitted}");
+
             if (spawned > maxSpawnedPerTick) maxSpawnedPerTick = spawned;
             if (callsSubmitted > maxCallsPerTick) maxCallsPerTick = callsSubmitted;
 
@@ -203,6 +206,8 @@ internal static class Program
         }
         Console.WriteLine($"Max spawned in a tick: {maxSpawnedPerTick}");
         Console.WriteLine($"Max calls in a tick: {maxCallsPerTick}");
+
+
 
 
         // ------------------------------------------------------------
