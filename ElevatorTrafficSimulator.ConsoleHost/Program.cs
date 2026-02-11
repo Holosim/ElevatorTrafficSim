@@ -55,10 +55,10 @@ internal static class Program
 
         const int floorCount = 40;
         const int elevatorCount = 4;
-        const int elevatorCapacity = 16;
+        const int elevatorCapacity = 4;
 
         const double dtSim = 0.2;                   // 5 Hz simulation tick (sim-time)
-        const double simDurationSeconds = 600.0;    // 10 minutes of sim-time
+        const double simDurationSeconds = 6000;    // 10 minutes of sim-time
         const double simStartSeconds = 8 * 3600.0;  // start at 08:00 to hit office rush curves
         const double speedFloorsPerSecond = 1.0;    // simple movement constant for now
 

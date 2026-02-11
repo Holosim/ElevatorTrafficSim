@@ -8,14 +8,24 @@ namespace FlowCore.Simulation;
 
 public sealed class ElevatorController
 {
+    // Door timing (seconds)
+    private const double DoorOpenSeconds = 1.0;
+    private const double DoorCloseSeconds = 1.0;
+
+    // Passenger service timing (seconds)
+    private const double BoardSecondsPerPerson = 1.0;
+    private const double AlightSecondsPerPerson = 0.5;
+
+    // We model door dwell as the combined open + close overhead at the stop.
+    // If you later model explicit open/close phases in the Elevator class, split these out.
+    private static readonly double DoorDwellSeconds = DoorOpenSeconds + DoorCloseSeconds;
+
     private readonly IEventBus _bus;
     private readonly IElevatorDispatchStrategy _strategy;
     private readonly List<Elevator> _fleet;
 
     private readonly Queue<CallRequest> _pendingCalls = new();
     private readonly Dictionary<int, ActiveAssignment> _active = new();
-
-    private const double DoorDwellSeconds = 2.0;
 
     private sealed class ActiveAssignment
     {
@@ -32,8 +42,14 @@ public sealed class ElevatorController
         public bool DoorDwellStartedAtPickup { get; set; }
         public bool DoorDwellStartedAtDropoff { get; set; }
 
-        // All calls boarded during pickup (includes primary + extra)
+        // Boarded calls captured at pickup. Includes primary + any extra batch-boarded calls.
         public List<CallRequest> BoardedCalls { get; } = new();
+
+        // Tracks whether we already emitted the cooldown notification for "departing pickup".
+        public bool CooldownNotifiedOnDeparture { get; set; }
+
+        // When we finish boarding, we move toward this next target.
+        public int? NextTargetFloorAfterBoarding { get; set; }
     }
 
     private enum AssignmentPhase
@@ -62,8 +78,6 @@ public sealed class ElevatorController
     public void Update(Building building, double tSim, double dtSimSeconds)
     {
         if (building is null) throw new ArgumentNullException(nameof(building));
-        if (_strategy is CooldownDispatchStrategy cds)
-            cds.SetSimTime(tSim);
 
         AssignPendingCalls(tSim);
 
@@ -91,7 +105,6 @@ public sealed class ElevatorController
                 break; // selected elevator is busy, stop for now
 
             _pendingCalls.Dequeue();
-            var elevator = _fleet.First(e => e.Id == elevatorId);
 
             _active[elevatorId] = new ActiveAssignment(call);
 
@@ -102,6 +115,7 @@ public sealed class ElevatorController
                 VehicleId: elevatorId,
                 EstimatedPickupT: double.NaN));
 
+            var elevator = _fleet.First(e => e.Id == elevatorId);
             elevator.SetTarget(call.OriginFloor);
         }
     }
@@ -114,6 +128,7 @@ public sealed class ElevatorController
         {
             case AssignmentPhase.GoingToPickup:
                 {
+                    // Wait until the elevator arrives and doors open.
                     if (elevator.CurrentFloor == call.OriginFloor &&
                         elevator.State == VehicleState.DoorsOpen)
                     {
@@ -138,11 +153,40 @@ public sealed class ElevatorController
 
             case AssignmentPhase.Boarding:
                 {
-                    // Board the primary call + additional matching calls from _pendingCalls, up to capacity.
+                    // If we are still in a timed boarding state, wait until it finishes,
+                    // then close doors and depart to the next target.
+                    if (elevator.State == VehicleState.Loading && elevator.StateTimeRemainingSeconds > 0)
+                    {
+                        // still boarding time ticking down
+                        break;
+                    }
+
+                    // If boarding time already ran and we have a next target, depart now.
+                    if (elevator.State != VehicleState.Loading &&
+                        a.NextTargetFloorAfterBoarding.HasValue &&
+                        elevator.State == VehicleState.DoorsOpen)
+                    {
+                        // Doors are still open at pickup. Close and depart.
+                        elevator.CloseDoorsToIdle();
+
+                        // Cooldown is "after the elevator leaves". We notify at the moment we depart pickup.
+                        if (!a.CooldownNotifiedOnDeparture &&
+                            _strategy is ICooldownAwareDispatchStrategy cool)
+                        {
+                            cool.NotifyElevatorDeparted(elevator.Id, tSim);
+                            a.CooldownNotifiedOnDeparture = true;
+                        }
+
+                        elevator.SetTarget(a.NextTargetFloorAfterBoarding.Value);
+                        a.Phase = AssignmentPhase.GoingToDropoff;
+                        break;
+                    }
+
+                    // Otherwise, we have not started boarding yet. Attempt to board a batch.
                     var capacityRemaining = elevator.Capacity - elevator.OccupantCount;
                     if (capacityRemaining <= 0)
                     {
-                        // Capacity block at pickup. Do NOT lose the request.
+                        // Elevator arrived full. Do NOT lose the request.
                         _bus.Publish(new VehicleAtCapacityAtPickupDomainEvent(
                             T: tSim,
                             Source: $"Elevator#{elevator.Id}",
@@ -154,34 +198,51 @@ public sealed class ElevatorController
                             VehicleCapacity: elevator.Capacity));
 
                         _pendingCalls.Enqueue(call);
-
                         elevator.CloseDoorsToIdle();
                         a.Phase = AssignmentPhase.Complete;
                         break;
                     }
 
+                    // Collect primary + any other pending calls that match this pickup (same floor + direction).
+                    // This does not touch floor queues yet.
+                    var boardedCalls = CollectBatchForPickup(call, maxCount: capacityRemaining);
 
-                    var boarded = CollectBatchForPickup(call, maxCount: capacityRemaining);
-
-                    if (boarded.Count == 0)
+                    if (boardedCalls.Count == 0)
                     {
-                        // Nobody to board, cancel this assignment.
+                        // Nobody to board (shouldn't happen because batch always includes primary),
+                        // but we handle defensively.
+                        _pendingCalls.Enqueue(call);
+                        elevator.CloseDoorsToIdle();
                         a.Phase = AssignmentPhase.Complete;
                         break;
                     }
 
-                    // Dequeue the same number of personIds from the floor queue (FIFO).
+                    // Now dequeue the corresponding people from the floor queue FIFO.
                     var floor = building.GetFloor(call.OriginFloor);
                     var dir = call.Direction;
 
-                    for (int i = 0; i < boarded.Count; i++)
+                    var actuallyDequeued = 0;
+                    for (int i = 0; i < boardedCalls.Count; i++)
                     {
-                        // keep floor queue lengths consistent (assumes FIFO aligns with call order)
-                        if (dir == 1 && floor.WaitingUpCount > 0) floor.DequeueUp();
-                        if (dir == 2 && floor.WaitingDownCount > 0) floor.DequeueDown();
+                        if (dir == 1)
+                        {
+                            if (floor.WaitingUpCount > 0)
+                            {
+                                floor.DequeueUp();
+                                actuallyDequeued++;
+                            }
+                        }
+                        else
+                        {
+                            if (floor.WaitingDownCount > 0)
+                            {
+                                floor.DequeueDown();
+                                actuallyDequeued++;
+                            }
+                        }
                     }
 
-                    // Publish updated queue size
+                    // Publish updated queue size after dequeue
                     _bus.Publish(new QueueSizeChangedDomainEvent(
                         T: tSim,
                         Source: $"Floor#{call.OriginFloor}",
@@ -189,14 +250,20 @@ public sealed class ElevatorController
                         Direction: dir,
                         NewQueueSize: dir == 1 ? floor.WaitingUpCount : floor.WaitingDownCount));
 
-                    // Board them into elevator
-                    foreach (var c in boarded)
+                    // Board them into elevator (stop if capacity reached unexpectedly).
+                    var boardedCount = 0;
+                    foreach (var c in boardedCalls)
                     {
                         if (elevator.IsAtCapacity)
-                            break;
+                        {
+                            // If this happens, the remaining calls must be re-queued.
+                            _pendingCalls.Enqueue(c);
+                            continue;
+                        }
 
                         elevator.AddPassenger(c.PersonId);
                         a.BoardedCalls.Add(c);
+                        boardedCount++;
 
                         _bus.Publish(new PersonBoardedDomainEvent(
                             T: tSim,
@@ -208,42 +275,33 @@ public sealed class ElevatorController
                             VehicleOccupantCountAfter: elevator.OccupantCount));
                     }
 
-                    // Apply boarding time cost: 1.0s per boarded passenger
-                    elevator.BeginBoarding(a.BoardedCalls.Count);
+                    if (boardedCount <= 0)
+                    {
+                        // Could not board anyone. Put primary back and quit.
+                        _pendingCalls.Enqueue(call);
+                        elevator.CloseDoorsToIdle();
+                        a.Phase = AssignmentPhase.Complete;
+                        break;
+                    }
 
-                    // Choose next target: nearest destination among boarded calls
+                    // Apply boarding time cost: 1.0s per boarded passenger
+                    elevator.BeginBoarding(boardedCount);
+
+                    // Decide next target among boarded passengers.
                     var nextTarget = a.BoardedCalls
                         .Select(c => c.DestinationFloor)
                         .OrderBy(f => Math.Abs(f - elevator.CurrentFloor))
                         .First();
 
-                    if (_strategy is ICooldownAwareDispatchStrategy cool)
-                        cool.NotifyElevatorDeparted(elevator.Id, tSim);
+                    a.NextTargetFloorAfterBoarding = nextTarget;
 
-                    // After boarding completes, we will start moving to dropoff
-                    a.Phase = AssignmentPhase.GoingToDropoff;
-
-                    // If boarding is instantaneous (unlikely), go immediately
-                    if (elevator.StateTimeRemainingSeconds <= 0)
-                    {
-                        elevator.CloseDoorsToIdle();
-                        elevator.SetTarget(nextTarget);
-                    }
-                    else
-                    {
-                        // Controller will see Loading complete on a later tick. For now, set target after load finishes.
-                        // We store the target by temporarily putting it into elevator.TargetFloor after doors close.
-                        // Simplest: set it now. Elevator.Update ignores targets while Loading.
-                        elevator.SetTarget(nextTarget);
-                    }
-
+                    // We remain in Boarding until loading time completes, then depart.
                     break;
                 }
 
             case AssignmentPhase.GoingToDropoff:
                 {
-                    // Wait until we arrive and doors open
-                    // Note: Elevator.Update sets DoorsOpen upon arrival.
+                    // Wait until we arrive and doors open at a floor where someone needs to get off.
                     if (elevator.State == VehicleState.DoorsOpen &&
                         a.BoardedCalls.Any(c => c.DestinationFloor == elevator.CurrentFloor))
                     {
@@ -268,7 +326,26 @@ public sealed class ElevatorController
 
             case AssignmentPhase.Unloading:
                 {
-                    // Minimal v1: unload everyone whose destination is the current floor.
+                    // If unloading is in progress, wait.
+                    if (elevator.State == VehicleState.Unloading && elevator.StateTimeRemainingSeconds > 0)
+                        break;
+
+                    // If unloading already finished and doors are open, decide where to go next.
+                    if (elevator.State != VehicleState.Unloading &&
+                        elevator.State == VehicleState.DoorsOpen &&
+                        a.DoorDwellStartedAtDropoff && a.BoardedCalls.Count >= 0)
+                    {
+                        // If we already removed passengers and began unloading time on a prior tick,
+                        // this branch closes doors and continues.
+                        if (elevator.StateTimeRemainingSeconds <= 0 && a.BoardedCalls.Count == 0)
+                        {
+                            elevator.CloseDoorsToIdle();
+                            a.Phase = AssignmentPhase.Complete;
+                            break;
+                        }
+                    }
+
+                    // Start unloading now (remove those whose destination is current floor).
                     var unloading = a.BoardedCalls
                         .Where(c => c.DestinationFloor == elevator.CurrentFloor)
                         .ToList();
@@ -287,24 +364,24 @@ public sealed class ElevatorController
                             VehicleOccupantCountAfter: elevator.OccupantCount));
                     }
 
-
                     // Apply unloading time cost: 0.5s per unloaded passenger
                     elevator.BeginUnloading(unloading.Count);
 
-                    // Remove completed calls from this assignment list
+                    // Remove completed calls from assignment list
                     foreach (var c in unloading)
                         a.BoardedCalls.Remove(c);
 
-                    // Decide what to do next after unloading completes
+                    // After unloading finishes, either complete or go to next destination
+                    if (elevator.State == VehicleState.Unloading && elevator.StateTimeRemainingSeconds > 0)
+                        break;
+
                     if (a.BoardedCalls.Count == 0)
                     {
-                        // Assignment done
-                        a.Phase = AssignmentPhase.Complete;
                         elevator.CloseDoorsToIdle();
+                        a.Phase = AssignmentPhase.Complete;
                     }
                     else
                     {
-                        // Continue to next nearest destination among remaining passengers
                         var nextTarget = a.BoardedCalls
                             .Select(c => c.DestinationFloor)
                             .OrderBy(f => Math.Abs(f - elevator.CurrentFloor))
@@ -313,7 +390,7 @@ public sealed class ElevatorController
                         elevator.CloseDoorsToIdle();
                         elevator.SetTarget(nextTarget);
 
-                        // Go back to dropoff phase (same logic)
+                        // Continue servicing remaining onboard calls.
                         a.DoorDwellStartedAtDropoff = false;
                         a.Phase = AssignmentPhase.GoingToDropoff;
                     }
@@ -332,7 +409,7 @@ public sealed class ElevatorController
             return batch;
 
         // Pull additional calls from _pendingCalls that match origin + direction.
-        // We preserve FIFO order by scanning once and rebuilding the queue.
+        // Preserve FIFO order by scanning once and rebuilding the queue.
         var remaining = new Queue<CallRequest>(_pendingCalls.Count);
         while (_pendingCalls.Count > 0)
         {
@@ -352,7 +429,6 @@ public sealed class ElevatorController
             }
         }
 
-        // Restore pending queue
         while (remaining.Count > 0)
             _pendingCalls.Enqueue(remaining.Dequeue());
 
