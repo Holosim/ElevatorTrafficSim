@@ -97,7 +97,11 @@ internal static class Program
         for (int i = 0; i < elevatorCount; i++)
             elevators.Add(new Elevator(id: i + 1, capacity: elevatorCapacity, startFloor: 0));
 
-        var strategy = new DispatchStrategyBasic();
+
+        IElevatorDispatchStrategy baseStrategy = new DispatchStrategyBasic(); 
+        IElevatorDispatchStrategy strategy = new CooldownDispatchStrategy(baseStrategy, cooldownSeconds: 3.0);
+
+
         var elevatorController = new ElevatorController(bus, strategy, elevators);
         
         var passengerController = new PassengerController(seed: 12345);
@@ -214,10 +218,15 @@ internal static class Program
         // Emit RunEnded (contract event directly)
         // ------------------------------------------------------------
         var simHours = simDurationSeconds / 3600.0;
+        var report = metrics.BuildWaitReport();
+        var capBlocksPerHour = simHours > 0 ? report.CapacityBlocksAtPickup / simHours : 0.0;
+
+        Console.WriteLine();
+        Console.WriteLine($"Capacity blocks at pickup: {report.CapacityBlocksAtPickup} ({capBlocksPerHour:F1}/hr)");
+
         var spawnRatePerHour = simHours > 0 ? totalSpawned / simHours : 0.0;
         var callRatePerHour = simHours > 0 ? totalCallsSubmitted / simHours : 0.0;
 
-        var report = metrics.BuildWaitReport();
 
         Console.WriteLine();
         Console.WriteLine("Wait time metrics");

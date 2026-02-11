@@ -62,6 +62,8 @@ public sealed class ElevatorController
     public void Update(Building building, double tSim, double dtSimSeconds)
     {
         if (building is null) throw new ArgumentNullException(nameof(building));
+        if (_strategy is CooldownDispatchStrategy cds)
+            cds.SetSimTime(tSim);
 
         AssignPendingCalls(tSim);
 
@@ -140,10 +142,24 @@ public sealed class ElevatorController
                     var capacityRemaining = elevator.Capacity - elevator.OccupantCount;
                     if (capacityRemaining <= 0)
                     {
-                        // No room. For v1, just end this assignment.
+                        // Capacity block at pickup. Do NOT lose the request.
+                        _bus.Publish(new VehicleAtCapacityAtPickupDomainEvent(
+                            T: tSim,
+                            Source: $"Elevator#{elevator.Id}",
+                            CallId: call.CallId,
+                            PersonId: call.PersonId,
+                            VehicleId: elevator.Id,
+                            Floor: call.OriginFloor,
+                            VehicleOccupantCount: elevator.OccupantCount,
+                            VehicleCapacity: elevator.Capacity));
+
+                        _pendingCalls.Enqueue(call);
+
+                        elevator.CloseDoorsToIdle();
                         a.Phase = AssignmentPhase.Complete;
                         break;
                     }
+
 
                     var boarded = CollectBatchForPickup(call, maxCount: capacityRemaining);
 
@@ -200,6 +216,9 @@ public sealed class ElevatorController
                         .Select(c => c.DestinationFloor)
                         .OrderBy(f => Math.Abs(f - elevator.CurrentFloor))
                         .First();
+
+                    if (_strategy is ICooldownAwareDispatchStrategy cool)
+                        cool.NotifyElevatorDeparted(elevator.Id, tSim);
 
                     // After boarding completes, we will start moving to dropoff
                     a.Phase = AssignmentPhase.GoingToDropoff;

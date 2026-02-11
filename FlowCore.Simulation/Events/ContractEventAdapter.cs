@@ -29,7 +29,21 @@ public sealed class ContractEventAdapterAsync : IAsyncDisposable
         _subscriptions.Add(bus.Subscribe<PersonBoardedDomainEvent>(e => _ = HandleAsync(e)));
         _subscriptions.Add(bus.Subscribe<PersonAlightedDomainEvent>(e => _ = HandleAsync(e)));
         _subscriptions.Add(bus.Subscribe<QueueSizeChangedDomainEvent>(e => _ = HandleAsync(e)));
+        _subscriptions.Add(bus.Subscribe<VehicleAtCapacityAtPickupDomainEvent>(e => _ = HandleAsync(e)));
 
+
+    }
+    private async Task HandleAsync(VehicleAtCapacityAtPickupDomainEvent e)
+    {
+        var payload = new VehicleAtCapacityAtPickupPayload(
+            e.CallId, e.PersonId, e.VehicleId, e.Floor, e.VehicleOccupantCount, e.VehicleCapacity);
+
+        await EmitAsync(
+            t: e.T,
+            type: SimEventType.VehicleAtCapacityAtPickup,
+            source: e.Source,
+            message: $"Vehicle {e.VehicleId} at capacity ({e.VehicleOccupantCount}/{e.VehicleCapacity}) at pickup floor {e.Floor} for call {e.CallId}",
+            payload: payload);
     }
 
     private async Task HandleAsync(CallAssignedDomainEvent e)

@@ -96,3 +96,12 @@ public readonly record struct QueueSizeChangedPayload(
     MotionDirection Direction,
     int NewQueueSize
 );
+
+public readonly record struct VehicleAtCapacityAtPickupPayload(
+    int CallId,
+    int PersonId,
+    int VehicleId,
+    int Floor,
+    int VehicleOccupantCount,
+    int VehicleCapacity
+);

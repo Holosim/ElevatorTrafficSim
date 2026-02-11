@@ -8,6 +8,7 @@ namespace FlowCore.Simulation;
 public sealed class MetricsAggregator : IDisposable
 {
     private readonly double _waitTargetSeconds;
+    private int _capacityBlocksAtPickup = 0;
 
     private readonly Dictionary<int, CallMeta> _calls = new();        // CallId -> (request time, type)
     private readonly Dictionary<int, double> _boardedAt = new();      // CallId -> boarded time
@@ -39,6 +40,12 @@ public sealed class MetricsAggregator : IDisposable
 
         _subs.Add(bus.Subscribe<PersonBoardedDomainEvent>(OnBoarded));
         _subs.Add(bus.Subscribe<PersonAlightedDomainEvent>(OnAlighted));
+        _subs.Add(bus.Subscribe<VehicleAtCapacityAtPickupDomainEvent>(OnCapacityBlockedAtPickup));
+
+    }
+    private void OnCapacityBlockedAtPickup(VehicleAtCapacityAtPickupDomainEvent e)
+    {
+        _capacityBlocksAtPickup++;
     }
 
     private void OnBoarded(PersonBoardedDomainEvent e)
@@ -86,7 +93,9 @@ public sealed class MetricsAggregator : IDisposable
             WaitTargetSeconds: _waitTargetSeconds,
             OverallWait: overall,
             WaitByType: byType,
-            OverallRide: ride);
+            OverallRide: ride,
+            CapacityBlocksAtPickup: _capacityBlocksAtPickup);
+
     }
 
     private static WaitStats ComputeStats(List<double> samples, double targetSeconds)
@@ -142,8 +151,10 @@ public sealed record SimulationWaitReport(
     double WaitTargetSeconds,
     WaitStats OverallWait,
     IReadOnlyDictionary<PassengerType, WaitStats> WaitByType,
-    WaitStats OverallRide
+    WaitStats OverallRide,
+    int CapacityBlocksAtPickup
 );
+
 
 public sealed record WaitStats(
     int Count,

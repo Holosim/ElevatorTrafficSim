@@ -48,3 +48,13 @@ public readonly record struct QueueSizeChangedDomainEvent(
     int NewQueueSize
 ) : IDomainEvent;
 
+public readonly record struct VehicleAtCapacityAtPickupDomainEvent(
+    double T,
+    string Source,
+    int CallId,
+    int PersonId,
+    int VehicleId,
+    int Floor,
+    int VehicleOccupantCount,
+    int VehicleCapacity
+) : IDomainEvent;

@@ -27,6 +27,7 @@ public enum SimEventType
     CapacityHit,
     VehicleStateChanged,
 
-    QueueSizeChanged
+    QueueSizeChanged,
+    VehicleAtCapacityAtPickup
 }
 
