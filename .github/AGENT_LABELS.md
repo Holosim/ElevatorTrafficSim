@@ -37,14 +37,37 @@ unclear who should act next, that's itself a question for
 
 ## Title convention
 
+Issues that trace to a feature start with the MVP ID:
+
+```
+[MVP-011] Short description of the feature
+```
+
+This makes the MVP ID searchable across issues, commits, and PRs without needing a label per ID. Features are the minimum viable product description for each enhancement of the software application that adds value to its function. The list of MVP's answers the question of "what" to make, and is the responsibility of the solutions-architect in coordination with the client (user).
+
 Issues that trace to a requirement start with the RTVM ID:
 
 ```
-[RTVM-014] Short description of the requirement
+[RTVM-012] Short description of the requirement
 ```
 
-This makes the RTVM ID searchable across issues, commits, and PRs without
-needing a label per ID.
+This makes the RTVM ID searchable across issues, commits, and PRs without needing a label per ID. The Requirements Traceability Verification Matrix is the documented description of HOW each desired MVP will be implemented, and WHERE a feature will reside in the system. It is the responsibility of the systems-engineeer to manage this matrix, along with pre-planned test procedures of how to verify that the feature functions correctly once it is completed.
+
+Issues that trace to any user input, output, or interface start with the UI ID:
+
+```
+[UI-013] Short description of the User Interface
+```
+
+This makes the UI ID searchable across issues, commits, and PRs without needing a label per ID. The User Interface is implemented by the software-engineer, as specified in the RTVM by the systems-engineer, as defined by the solutions-architect.
+
+All other issues start with the TASK ID:
+
+```
+[TASK-013] Short description of the task
+```
+
+This delineates the rest of the issues, commits, and PRs from the ones with a specific ID without needing a label.
 
 ## Handoff protocol
 

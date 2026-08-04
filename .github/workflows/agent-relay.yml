@@ -96,4 +96,3 @@ jobs:
                Keep entries short and dated.
           claude_args: |
             --agent ${{ steps.role.outputs.role }}
-            --allowedTools Bash,Read,Edit,Write
