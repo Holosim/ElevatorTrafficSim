@@ -26,8 +26,25 @@ unclear who should act next, that's itself a question for
   as an escalation rather than a fresh assignment
 - `status:ready-for-test` — implementation complete, awaiting the Test
   Engineer
-- `status:ready-for-commit` — tests passed, awaiting CI/CD
+- `status:ready-for-rtvm-update` — a test passed; paired with
+  `agent:systems-engineer`. Signals the fast path: update the RTVM
+  status for the relevant requirement, then pass straight to
+  `agent:cicd` — this is not a new requirement to define.
+- `status:ready-for-commit` — RTVM is current and tests passed,
+  awaiting CI/CD
 - `status:verified` — the linked RTVM item is closed
+- `status:cancelled` — a test procedure or requirement changed
+  mid-test; the in-flight test iteration is void and will restart once
+  a new build is ready
+- `status:needs-human` — an automated escalation path has been
+  exhausted (e.g. five consecutive fail/rebuild/retest cycles on the
+  same requirement). The relay stops here on purpose. A human reviews
+  the thread and either resolves it directly or manually relabels to
+  resume.
+- `status:waiting-on-lock` — this issue's agent backed off after
+  failing to acquire a file lock (see `docs/LOCKING.md`). A scheduled
+  sweep retries it periodically; no action needed unless it's stuck
+  for an unusually long time.
 
 ## Type labels
 
@@ -37,45 +54,60 @@ unclear who should act next, that's itself a question for
 
 ## Title convention
 
-Issues that trace to a feature start with the MVP ID:
-
-```
-[MVP-011] Short description of the feature
-```
-
-This makes the MVP ID searchable across issues, commits, and PRs without needing a label per ID. Features are the minimum viable product description for each enhancement of the software application that adds value to its function. The list of MVP's answers the question of "what" to make, and is the responsibility of the solutions-architect in coordination with the client (user).
-
 Issues that trace to a requirement start with the RTVM ID:
 
 ```
-[RTVM-012] Short description of the requirement
+[RTVM-014] Short description of the requirement
 ```
 
-This makes the RTVM ID searchable across issues, commits, and PRs without needing a label per ID. The Requirements Traceability Verification Matrix is the documented description of HOW each desired MVP will be implemented, and WHERE a feature will reside in the system. It is the responsibility of the systems-engineeer to manage this matrix, along with pre-planned test procedures of how to verify that the feature functions correctly once it is completed.
+This makes the RTVM ID searchable across issues, commits, and PRs without
+needing a label per ID.
 
-Issues that trace to any user input, output, or interface start with the UI ID:
+## Notify vs. hand off
 
-```
-[UI-013] Short description of the User Interface
-```
+These are different actions and shouldn't be conflated:
 
-This makes the UI ID searchable across issues, commits, and PRs without needing a label per ID. The User Interface is implemented by the software-engineer, as specified in the RTVM by the systems-engineer, as defined by the solutions-architect.
+- **Notify** — a comment addressed to a role by name, for their
+  awareness. No relabel. Use this when the next *action* isn't theirs
+  but they need to know something changed (e.g. Solutions Architect
+  telling Systems Engineer about a scope refinement nobody asked for;
+  Systems Engineer telling Software Engineer an RTVM item changed).
+- **Hand off** — a comment plus a relabel, because the next action
+  genuinely is theirs.
 
-All other issues start with the TASK ID:
+When a rule says "notify X, then notify Y" and both are real actions
+someone has to take (not just awareness), treat it as two sequential
+handoffs — X acts and relabels to Y — rather than trying to address two
+roles' turns at once. See `status:ready-for-rtvm-update` above for the
+concrete example.
 
-```
-[TASK-013] Short description of the task
-```
+## Document locations
 
-This delineates the rest of the issues, commits, and PRs from the ones with a specific ID without needing a label.
+Every role's file references these; keep the paths consistent across
+projects built from this template:
+
+- `docs/PROJECT_DEFINITION.md` — Solutions Architect's scope
+  definition: business analysis, stakeholder needs, MVP definition
+- `docs/RTVM.md` — Systems Engineer's requirements traceability and
+  verification matrix (plain markdown table: ID, category, requirement,
+  verification method, test procedure reference, status)
+- `docs/SDD.md` — Systems Engineer's software design document and
+  system architecture
+- `docs/IMPLEMENTATION_PLAN.md` — Systems Engineer's build sequence,
+  most-critical-first, ideally with a Mermaid diagram (renders natively
+  on GitHub, is close enough to UML for this purpose without needing
+  separate tooling)
+- `docs/LOCKING.md` — the symbolic file-locking convention; read this
+  before editing any binary asset or shared document
 
 ## Handoff protocol
 
 Every handoff:
 1. Removes the acting role's `agent:*` label
 2. Adds exactly one new `agent:*` label for the next role
-3. Adds `status:blocked` too, if this is an escalation rather than a
-   normal next step
+3. Adds a relevant `status:*` label alongside it when the handoff is
+   anything other than the normal next step (an escalation, a
+   cancellation, an RTVM-update fast path)
 
 The workflow's job only reacts to label-*add* events, so a handoff always
 means adding the next label — removing one on its own does nothing.

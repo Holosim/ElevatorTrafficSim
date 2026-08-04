@@ -1,0 +1,39 @@
+name: lock-retry
+
+# Safety-net sweep, not the primary path. An agent that fails to
+# acquire a lock backs off on its own (see docs/LOCKING.md) rather
+# than idling inside a live job. This just makes sure a blocked issue
+# doesn't sit forever if it's never otherwise re-triggered.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  requeue:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELAY_TOKEN }}
+    steps:
+      - name: Re-trigger issues waiting on a lock
+        run: |
+          gh issue list --label "status:waiting-on-lock" --state open \
+            --json number,labels --repo "${{ github.repository }}" \
+            | jq -c '.[]' \
+            | while read -r issue; do
+                NUMBER=$(echo "$issue" | jq -r '.number')
+                AGENT_LABEL=$(echo "$issue" | jq -r '.labels[].name' | grep '^agent:' || true)
+                if [[ -n "$AGENT_LABEL" ]]; then
+                  echo "Re-triggering #$NUMBER ($AGENT_LABEL)"
+                  gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+                    --remove-label "status:waiting-on-lock"
+                  gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+                    --remove-label "$AGENT_LABEL"
+                  gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+                    --add-label "$AGENT_LABEL"
+                fi
+              done
