@@ -1,0 +1,99 @@
+name: agent-relay
+
+# Fires whenever an "agent:*" label lands on an issue, or a role is
+# @-mentioned in a comment. See .github/AGENT_LABELS.md for the label
+# convention this workflow depends on.
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: agent-relay-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  relay:
+    if: >
+      (github.event_name == 'issues' && startsWith(github.event.label.name, 'agent:')) ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@agent-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # RELAY_TOKEN must be a personal access token or GitHub App
+    # installation token, NOT the default GITHUB_TOKEN. Labels added
+    # using the default token don't fire new workflow runs, which would
+    # silently break the handoff to the next role. See setup notes below.
+    env:
+      GH_TOKEN: ${{ secrets.RELAY_TOKEN }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Determine which role should act
+        id: role
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            ROLE="${{ github.event.label.name }}"
+            ROLE="${ROLE#agent:}"
+          else
+            ROLE=$(echo "$COMMENT_BODY" | grep -oE '@agent-[a-z-]+' | head -1 | sed 's/@agent-//')
+          fi
+          if [ -z "$ROLE" ]; then
+            echo "No agent role matched in this event — nothing to do."
+            exit 1
+          fi
+          echo "role=$ROLE" >> "$GITHUB_OUTPUT"
+          echo "issue=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Mark issue in progress
+        run: |
+          gh issue edit ${{ steps.role.outputs.issue }} --add-label "status:in-progress" || true
+
+      - name: Run Claude Code as ${{ steps.role.outputs.role }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Alternative if you'd rather draw from your Claude subscription
+          # instead of separate API billing:
+          # claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE: #${{ steps.role.outputs.issue }}
+
+            You are acting as the ${{ steps.role.outputs.role }} on this
+            project. Your responsibilities and communication rules are
+            defined in .claude/agents/${{ steps.role.outputs.role }}.md —
+            follow them.
+
+            1. Read issue #${{ steps.role.outputs.issue }} in full,
+               including every comment, to understand the current state
+               of this handoff.
+            2. Read .claude/agent-memory/${{ steps.role.outputs.role }}/MEMORY.md
+               for anything relevant you've learned on past issues.
+            3. Do the work the issue is asking of you.
+            4. Post one comment on the issue summarizing what you did,
+               prefixed with your role name (e.g. "Software Engineer:").
+            5. Hand off by running exactly one command:
+                 gh issue edit ${{ steps.role.outputs.issue }} \
+                   --remove-label "agent:${{ steps.role.outputs.role }}" \
+                   --remove-label "status:in-progress" \
+                   --add-label "agent:<next-role>"
+               If you're blocked, add "status:blocked" and set the next
+               role to agent:solutions-architect instead of the normal
+               next step.
+            6. If you learned something durable — a pattern, a gotcha,
+               an architectural decision — append it to your MEMORY.md.
+               Keep entries short and dated.
+          claude_args: |
+            --agent ${{ steps.role.outputs.role }}
+            --allowedTools Bash,Read,Edit,Write
