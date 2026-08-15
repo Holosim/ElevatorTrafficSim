@@ -14,6 +14,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  id-token: write
 
 concurrency:
   group: agent-relay-${{ github.event.issue.number }}
@@ -24,6 +25,7 @@ jobs:
     if: >
       (github.event_name == 'issues' && startsWith(github.event.label.name, 'agent:')) ||
       (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
        contains(github.event.comment.body, '@agent-'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -81,8 +83,15 @@ jobs:
             2. Read .claude/agent-memory/${{ steps.role.outputs.role }}/MEMORY.md
                for anything relevant you've learned on past issues.
             3. Do the work the issue is asking of you.
-            4. Post one comment on the issue summarizing what you did,
-               prefixed with your role name (e.g. "Software Engineer:").
+            4. Post one comment on the issue before you finish — no
+               matter what happened. This isn't conditional on
+               success: if you completed the task, say what you did;
+               if you hit an error, ran out of information you
+               couldn't resolve, or got blocked by something outside
+               your control, say that instead, as specifically as you
+               can. The comment thread should never go quiet with no
+               record of what was attempted. Prefix it with your role
+               name (e.g. "Software Engineer:").
             5. Hand off by running exactly one command:
                  gh issue edit ${{ steps.role.outputs.issue }} \
                    --remove-label "agent:${{ steps.role.outputs.role }}" \
@@ -90,9 +99,15 @@ jobs:
                    --add-label "agent:<next-role>"
                If you're blocked, add "status:blocked" and set the next
                role to agent:solutions-architect instead of the normal
-               next step.
+               next step. Exception: if your role's own instructions
+               say you're waiting on a human reply rather than handing
+               off to another role, follow that instead — just remove
+               "status:in-progress" and leave your own agent:* label in
+               place, so nothing else gets triggered on this issue
+               until they reply.
             6. If you learned something durable — a pattern, a gotcha,
                an architectural decision — append it to your MEMORY.md.
                Keep entries short and dated.
           claude_args: |
             --agent ${{ steps.role.outputs.role }}
+            --permission-mode bypassPermissions

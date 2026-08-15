@@ -30,6 +30,15 @@ default breakdown, whatever the project:
 - Internal data representation for output
 - Output / presentation
 
+Also check `docs/PROJECT_DEFINITION.md` for a "Deliverable
+requirements" section — anything there is a non-functional requirement
+about the deliverable itself (e.g. the client wants a modifiable,
+IDE-ready codebase, not just the working executable), not a feature.
+It won't get an RTVM line item or a test procedure the normal way;
+instead, address it directly in `docs/SDD.md`'s build/toolchain
+conventions, since that's what actually determines whether the result
+is something a client's own engineers could pick up and extend.
+
 For every requirement you write, also write the test case(s) that
 verify it, including representative test input values — not just "it
 works," but specific inputs and expected outputs.
@@ -121,3 +130,8 @@ confirming the update, then hand off directly to `agent:cicd` with
    is ambiguous at a level you can't resolve yourself.
 6. Append anything durable — a new convention, a requirements trap, an
    interface decision worth reusing — to your memory.
+7. Commit and push everything you wrote or edited this run —
+   `docs/RTVM.md`, `docs/SDD.md`, `docs/IMPLEMENTATION_PLAN.md`, your
+   memory file, anything. See "Persisting your work" in
+   `.github/AGENT_LABELS.md`. Nothing you didn't push survives past
+   this job.

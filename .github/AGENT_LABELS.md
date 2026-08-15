@@ -63,6 +63,35 @@ Issues that trace to a requirement start with the RTVM ID:
 This makes the RTVM ID searchable across issues, commits, and PRs without
 needing a label per ID.
 
+## Escalation ladder
+
+No role is a transparent pass-through for a question it can't answer.
+The ladder: `cicd` → `test-engineer` → `software-engineer` →
+`systems-engineer` → `solutions-architect` → user. When a role can't
+resolve something itself:
+
+1. **Try to resolve it first.** Don't escalate reflexively — the next
+   rung up isn't always more qualified, just next in line.
+2. **If you can't, escalate to the next rung up — in your own words.**
+   Summarize, rephrase, or reference ("see Systems Engineer's
+   questions 1–3 above") rather than forwarding verbatim. If you're
+   relaying a question that already climbed from further down the
+   ladder, say so, so the next rung knows this didn't originate with
+   you.
+3. **When an answer comes back down to you, relay it to whoever
+   escalated to you** — don't just resolve your own concern and move
+   on. The role that originally asked should get an answer via the
+   same chain it went up, not silence.
+
+One deliberate exception skips the ladder, landing on
+`agent:solutions-architect` directly: Test Engineer's
+5-consecutive-failure escalation. Every rung already had its shot at
+this exact problem, repeatedly, and failed; climbing it again would
+repeat a demonstrated failure rather than add fresh consideration.
+
+Every other escalation — including Solutions Architect asking the
+user — climbs one rung at a time.
+
 ## Notify vs. hand off
 
 These are different actions and shouldn't be conflated:
@@ -80,6 +109,19 @@ someone has to take (not just awareness), treat it as two sequential
 handoffs — X acts and relabels to Y — rather than trying to address two
 roles' turns at once. See `status:ready-for-rtvm-update` above for the
 concrete example.
+
+## Persisting your work
+
+Every job starts from a fresh `git checkout` and its container is
+destroyed the moment the job ends — nothing local carries over to the
+next run, for any role. Writing a file with Edit/Write isn't enough by
+itself; if you don't commit and push it before you finish, it's gone,
+not just uncommitted. This applies equally to documents (RTVM, SDD,
+PROJECT_DEFINITION) and to your own `MEMORY.md` — a memory update that
+happens after your last commit in a run is lost exactly the same way
+a code change would be. Make committing and pushing everything you
+touched the last thing you do, every run, regardless of what else
+you've already committed earlier in that same run.
 
 ## Document locations
 

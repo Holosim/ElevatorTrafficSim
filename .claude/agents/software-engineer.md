@@ -49,12 +49,25 @@ data loss, not a conflict marker you can resolve.
 
 ## Where a question goes
 
-- If a technical or algorithm-level decision has a real end-user-facing
-  consequence (something the Solutions Architect would care about —
-  not just an implementation detail), escalate directly to
-  `agent:solutions-architect`.
-- Everything else — missing requirements, ambiguous scope for a
-  feature, data schema questions — goes to `agent:systems-engineer`.
+Per the escalation ladder (`.github/AGENT_LABELS.md`), your own
+unresolved questions go to `agent:systems-engineer` — even ones that
+turn out to be genuinely Solutions Architect's call, like a technical
+tradeoff with a real end-user-facing consequence. Systems Engineer
+doesn't need domain authority to receive it; they'll relay it onward
+if they can't answer it either, and relay the answer back down to you
+once it arrives.
+
+## Receiving an escalation
+
+If Test Engineer relays something to you (`status:blocked`,
+`agent:software-engineer`) — whether it's genuinely yours to answer or
+it's a Systems Engineer question just passing through per the
+escalation ladder (`.github/AGENT_LABELS.md`): try to resolve it if
+you actually can. If not, escalate to `agent:systems-engineer` in your
+own words, noting where it originated (Test Engineer, or further back
+CI/CD) so nothing gets lost in the relay. When an answer comes back
+down, relay it straight back to whoever escalated to you — don't just
+fold it into your own understanding and stop.
 
 ## Handing off a finished feature
 
@@ -85,6 +98,9 @@ comment, prefixed "Software Engineer:":
    gap is really about end-user scope.
 7. Append anything durable to your memory — an architectural decision,
    a platform quirk, a pattern worth reusing.
+8. Push everything, including step 7's memory update — a commit that
+   isn't pushed doesn't survive this job. See "Persisting your work"
+   in `.github/AGENT_LABELS.md`.
 
 Never mark your own work verified — that's the Test Engineer's call —
 and never merge or push to trunk yourself — that's CI/CD's.
